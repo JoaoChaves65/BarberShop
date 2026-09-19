@@ -148,6 +148,67 @@ export async function seed(executor: DbClient = createPool()): Promise<void> {
     console.log('[Seed] Created barbers');
 
     // ============================================
+    // BARBER SCHEDULES
+    // ============================================
+    const schedulesSql = `INSERT INTO barber_schedules (barber_id, day_of_week, start_time, end_time, break_start, break_end, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`;
+    const scheduleRows: unknown[][] = [
+      // João: Mon-Fri 09:00-18:00, lunch 12:00-13:00
+      [barber1Id, 1, '09:00', '18:00', '12:00', '13:00', true],
+      [barber1Id, 2, '09:00', '18:00', '12:00', '13:00', true],
+      [barber1Id, 3, '09:00', '18:00', '12:00', '13:00', true],
+      [barber1Id, 4, '09:00', '18:00', '12:00', '13:00', true],
+      [barber1Id, 5, '09:00', '18:00', '12:00', '13:00', true],
+      // João: Saturday 09:00-14:00
+      [barber1Id, 6, '09:00', '14:00', null, null, true],
+      // Maria: Tue-Sat 10:00-19:00, lunch 13:00-14:00
+      [barber2Id, 2, '10:00', '19:00', '13:00', '14:00', true],
+      [barber2Id, 3, '10:00', '19:00', '13:00', '14:00', true],
+      [barber2Id, 4, '10:00', '19:00', '13:00', '14:00', true],
+      [barber2Id, 5, '10:00', '19:00', '13:00', '14:00', true],
+      [barber2Id, 6, '10:00', '19:00', '13:00', '14:00', true],
+    ];
+    for (const row of scheduleRows) {
+      await client.query(schedulesSql, row);
+    }
+    console.log('[Seed] Created barber schedules');
+
+    // Date references for blocks (defined early for use in blocks)
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    // ============================================
+    // BARBER BLOCKS
+    // ============================================
+    const blocksSql = `INSERT INTO barber_blocks (barber_id, start_date_time, end_date_time, reason, recurring, recurrence_rule)
+       VALUES ($1, $2, $3, $4, $5, $6)`;
+    const blockRows: unknown[][] = [
+      // João: vacation next week Monday
+      [
+        barber1Id,
+        new Date(nextWeek.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString(),
+        new Date(nextWeek.getTime() + 1 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000).toISOString(),
+        'TIME_OFF',
+        false,
+        null,
+      ],
+      // Maria: recurring lunch break (already in schedule, but example of recurring block)
+      [
+        barber2Id,
+        new Date(tomorrow.getTime() + 13 * 60 * 60 * 1000).toISOString(),
+        new Date(tomorrow.getTime() + 14 * 60 * 60 * 1000).toISOString(),
+        'LUNCH',
+        true,
+        'FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA',
+      ],
+    ];
+    for (const row of blockRows) {
+      await client.query(blocksSql, row);
+    }
+    console.log('[Seed] Created barber blocks');
+
+    // ============================================
     // SERVICES
     // ============================================
     const servicesSql = `INSERT INTO services (name, description, price, duration_minutes, active)
@@ -173,8 +234,6 @@ export async function seed(executor: DbClient = createPool()): Promise<void> {
     // ============================================
     // APPOINTMENTS
     // ============================================
-    const now = new Date();
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 

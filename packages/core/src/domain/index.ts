@@ -4,6 +4,8 @@ export * from './email';
 export * from './user';
 export * from './customer';
 export * from './barber';
+export * from './barber-schedule';
+export * from './barber-block';
 export * from './service';
 export * from './appointment';
 export * from './transaction';

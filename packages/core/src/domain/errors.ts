@@ -136,3 +136,11 @@ export class AccountInactiveError extends DomainError {
     Object.setPrototypeOf(this, AccountInactiveError.prototype);
   }
 }
+
+export class ConflictError extends DomainError {
+  constructor(message: string) {
+    super('CONFLICT', message);
+    this.name = 'ConflictError';
+    Object.setPrototypeOf(this, ConflictError.prototype);
+  }
+}

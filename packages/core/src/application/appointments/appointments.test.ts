@@ -22,12 +22,14 @@ import { InMemoryAppointmentRepository } from '../../persistence/in-memory/appoi
 import { InMemoryBarberRepository } from '../../persistence/in-memory/barber-repository';
 import { InMemoryCustomerRepository } from '../../persistence/in-memory/customer-repository';
 import { InMemoryServiceRepository } from '../../persistence/in-memory/service-repository';
+import type { InMemorySqlExecutor } from '../../persistence/in-memory/sql-executor';
 
 describe('Appointment use cases', () => {
   let appointments: InMemoryAppointmentRepository;
   let customers: InMemoryCustomerRepository;
   let barbers: InMemoryBarberRepository;
   let services: InMemoryServiceRepository;
+  let executor: InMemorySqlExecutor;
   let customerId: string;
   let barberId: string;
   let serviceId: string;
@@ -37,10 +39,11 @@ describe('Appointment use cases', () => {
     customers = new InMemoryCustomerRepository();
     barbers = new InMemoryBarberRepository();
     services = new InMemoryServiceRepository();
+    const { InMemorySqlExecutor: InMemorySqlExecutorClass } = await import('../../persistence/in-memory/sql-executor');
+    executor = new InMemorySqlExecutorClass();
 
-    customerId = (
-      await customers.create(createCustomer({ name: 'Carlos', phone: '(11) 99999-1111' }))
-    ).id;
+    const customer = await customers.create(createCustomer({ name: 'Carlos', phone: '(11) 99999-1111' }));
+    customerId = customer.id;
     barberId = (await barbers.create(createBarber({ name: 'João' }))).id;
     serviceId = (
       await services.create(
@@ -49,7 +52,7 @@ describe('Appointment use cases', () => {
     ).id;
   });
 
-  const buildUseCase = () => new CreateAppointment(appointments, customers, barbers, services);
+  const buildUseCase = () => new CreateAppointment(appointments, customers, barbers, services, executor);
 
   describe('CreateAppointment', () => {
     it('creates a PENDING appointment', async () => {

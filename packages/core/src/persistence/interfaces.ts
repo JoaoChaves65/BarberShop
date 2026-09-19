@@ -3,6 +3,8 @@ import type { QueryResultRow } from 'pg';
 import type { User } from '../domain/user';
 import type { Customer } from '../domain/customer';
 import type { Barber } from '../domain/barber';
+import type { BarberSchedule } from '../domain/barber-schedule';
+import type { BarberBlock } from '../domain/barber-block';
 import type { Service } from '../domain/service';
 import type { Appointment } from '../domain/appointment';
 import type { Transaction } from '../domain/transaction';
@@ -59,6 +61,26 @@ export interface BarberRepository {
   findAll(params: PaginationParams): Promise<PaginatedResponse<Barber>>;
 }
 
+export interface BarberScheduleRepository {
+  create(schedule: BarberSchedule): Promise<BarberSchedule>;
+  update(schedule: BarberSchedule): Promise<BarberSchedule>;
+  findById(id: string): Promise<BarberSchedule | null>;
+  findByBarberId(barberId: string): Promise<BarberSchedule[]>;
+  findByBarberIdAndDay(barberId: string, dayOfWeek: number): Promise<BarberSchedule | null>;
+  delete(id: string): Promise<void>;
+  findAll(params: PaginationParams): Promise<PaginatedResponse<BarberSchedule>>;
+}
+
+export interface BarberBlockRepository {
+  create(block: BarberBlock): Promise<BarberBlock>;
+  update(block: BarberBlock): Promise<BarberBlock>;
+  findById(id: string): Promise<BarberBlock | null>;
+  findByBarberId(barberId: string): Promise<BarberBlock[]>;
+  findOverlapping(barberId: string, startDateTime: Date, endDateTime: Date): Promise<BarberBlock[]>;
+  delete(id: string): Promise<void>;
+  findAll(params: PaginationParams): Promise<PaginatedResponse<BarberBlock>>;
+}
+
 export interface ServiceRepository {
   create(service: Service): Promise<Service>;
   update(service: Service): Promise<Service>;
@@ -71,6 +93,7 @@ export interface AppointmentRepository {
   update(appointment: Appointment): Promise<Appointment>;
   findById(id: string): Promise<Appointment | null>;
   findAll(params: PaginationParams): Promise<PaginatedResponse<Appointment>>;
+  findConflictingAppointments(barberId: string, startDateTime: Date, endDateTime: Date): Promise<Appointment[]>;
 }
 
 export interface TransactionRepository {

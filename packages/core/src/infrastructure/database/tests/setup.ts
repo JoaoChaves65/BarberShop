@@ -67,6 +67,8 @@ export const runMigrations = async (
 export const resetTestDatabase = async (): Promise<void> => {
   const pool = getTestPool();
   await pool.query(`
+    DROP TABLE IF EXISTS barber_blocks CASCADE;
+    DROP TABLE IF EXISTS barber_schedules CASCADE;
     DROP TABLE IF EXISTS refresh_tokens CASCADE;
     DROP TABLE IF EXISTS transactions CASCADE;
     DROP TABLE IF EXISTS appointments CASCADE;

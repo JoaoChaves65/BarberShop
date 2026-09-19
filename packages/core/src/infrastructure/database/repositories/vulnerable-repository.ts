@@ -145,4 +145,10 @@ export class VulnerableAppointmentRepository implements AppointmentRepository {
     const query = 'DELETE FROM appointments WHERE id = $1';
     await this.executor.query(query, [id]);
   }
+
+  async findConflictingAppointments(barberId: string, startDateTime: Date, endDateTime: Date): Promise<Appointment[]> {
+    // VULNERÁVEL: Concatenação direta no SQL
+    const query = `SELECT a.* FROM appointments a JOIN services s ON a.service_id = s.id WHERE a.barber_id = '${barberId}' AND a.status IN ('PENDING', 'CONFIRMED') AND a.date_time < '${endDateTime.toISOString()}' AND a.date_time + (s.duration_minutes || ' minutes')::interval > '${startDateTime.toISOString()}'`;
+    return this.executor.query<Appointment>(query, []);
+  }
 }

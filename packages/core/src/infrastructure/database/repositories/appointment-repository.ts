@@ -67,4 +67,18 @@ export class PgAppointmentRepository
   async findAll(params: PaginationParams): Promise<PaginatedResponse<Appointment>> {
     return super.findAll(params);
   }
+
+  async findConflictingAppointments(barberId: string, startDateTime: Date, endDateTime: Date): Promise<Appointment[]> {
+    const rows = await this.executor.query(
+      `SELECT a.*
+       FROM appointments a
+       JOIN services s ON a.service_id = s.id
+       WHERE a.barber_id = $1
+         AND a.status IN ('PENDING', 'CONFIRMED')
+         AND a.date_time < $2
+         AND a.date_time + (s.duration_minutes || ' minutes')::interval > $3`,
+      [barberId, endDateTime, startDateTime]
+    );
+    return rows.map(row => this.mapRow(row));
+  }
 }

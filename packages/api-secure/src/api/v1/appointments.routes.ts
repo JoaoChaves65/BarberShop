@@ -20,6 +20,7 @@ import { requireRole } from '../../http/middleware/rbac';
 import type { AuthenticatedRequest } from '../../http/middleware/auth';
 import { AppError } from '@barberlab/core';
 import type { UserRole } from '@barberlab/core';
+import { ConflictError } from '@barberlab/core/domain';
 
 const router = Router();
 
@@ -113,7 +114,8 @@ router.post(
       appointmentsRepo,
       customersRepo,
       barbersRepo,
-      servicesRepo
+      servicesRepo,
+      executor
     );
 
     const input = {
@@ -121,18 +123,26 @@ router.post(
       dateTime: new Date(parseResult.data.dateTime),
     };
 
-    const appointment = await createAppointment.execute(input);
-    res.status(201).json({
-      id: appointment.id,
-      customerId: appointment.customerId,
-      barberId: appointment.barberId,
-      serviceId: appointment.serviceId,
-      dateTime: appointment.dateTime,
-      status: appointment.status,
-      notes: appointment.notes,
-      createdAt: appointment.createdAt,
-      updatedAt: appointment.updatedAt,
-    });
+    try {
+      const appointment = await createAppointment.execute(input);
+      res.status(201).json({
+        id: appointment.id,
+        customerId: appointment.customerId,
+        barberId: appointment.barberId,
+        serviceId: appointment.serviceId,
+        dateTime: appointment.dateTime,
+        status: appointment.status,
+        notes: appointment.notes,
+        createdAt: appointment.createdAt,
+        updatedAt: appointment.updatedAt,
+      });
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
   }
 );
 
