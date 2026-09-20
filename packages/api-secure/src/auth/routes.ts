@@ -25,11 +25,10 @@ const loginSchema = z.object({
 });
 
 const env = getEnv();
-const isDevOrTest = env.NODE_ENV !== 'production';
 
 const authRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: isDevOrTest ? 1000 : 20,
+  windowMs: env.RATE_LIMIT_WINDOW_MS,
+  max: env.RATE_LIMIT_MAX_REQUESTS,
   message: { error: 'Too many authentication attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,

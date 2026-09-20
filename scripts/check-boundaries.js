@@ -8,13 +8,8 @@ const ROOT = path.resolve(__dirname, '..');
 const FORBIDDEN_IMPORTS = [
   {
     from: 'packages/core',
-    to: ['packages/api-secure', 'packages/api-vulnerable'],
-    message: 'core cannot import from api-secure or api-vulnerable',
-  },
-  {
-    from: 'packages/api-secure',
-    to: ['packages/api-vulnerable'],
-    message: 'api-secure cannot import from api-vulnerable',
+    to: ['packages/api-secure'],
+    message: 'core cannot import from api-secure',
   },
 ];
 
@@ -82,7 +77,6 @@ function checkImport(filePath, importPath, violations) {
 function getPackageFromPath(filePath) {
   if (filePath.startsWith('packages/core/')) return 'core';
   if (filePath.startsWith('packages/api-secure/')) return 'api-secure';
-  if (filePath.startsWith('packages/api-vulnerable/')) return 'api-vulnerable';
   if (filePath.startsWith('packages/web/')) return 'web';
   return null;
 }
@@ -92,7 +86,7 @@ function main() {
 
   const violations = [];
 
-  for (const pkg of ['core', 'api-secure', 'api-vulnerable', 'web']) {
+  for (const pkg of ['core', 'api-secure', 'web']) {
     const pkgDir = path.join(ROOT, 'packages', pkg, 'src');
     if (fs.existsSync(pkgDir)) {
       const files = findTsFiles(pkgDir);

@@ -12,41 +12,30 @@ import {
 } from '../../domain/errors';
 import { isServiceActive } from '../../domain/service';
 import type {
-  AppointmentRepository,
-  BarberRepository,
-  CustomerRepository,
-  ServiceRepository,
   SqlExecutor,
+  RepositoryFactory,
 } from '../../persistence/interfaces';
 import type { Command } from '../interfaces';
 
 export class CreateAppointment implements Command<CreateAppointmentInput, Appointment> {
   constructor(
-    private readonly appointments: AppointmentRepository,
-    private readonly customers: CustomerRepository,
-    private readonly barbers: BarberRepository,
-    private readonly services: ServiceRepository,
+    private readonly factory: RepositoryFactory,
     private readonly executor: SqlExecutor
   ) {}
 
   async execute(input: CreateAppointmentInput): Promise<Appointment> {
     return this.executor.transaction(async (txExecutor) => {
-      const { PgAppointmentRepository } = await import('../../infrastructure/database/repositories/appointment-repository.js');
-      const { PgCustomerRepository } = await import('../../infrastructure/database/repositories/customer-repository.js');
-      const { PgBarberRepository } = await import('../../infrastructure/database/repositories/barber-repository.js');
-      const { PgServiceRepository } = await import('../../infrastructure/database/repositories/service-repository.js');
+      const appointments = this.factory.createAppointmentRepository(txExecutor);
+      const customers = this.factory.createCustomerRepository(txExecutor);
+      const barbers = this.factory.createBarberRepository(txExecutor);
+      const services = this.factory.createServiceRepository(txExecutor);
 
-      const txAppointments = new PgAppointmentRepository(txExecutor);
-      const txCustomers = new PgCustomerRepository(txExecutor);
-      const txBarbers = new PgBarberRepository(txExecutor);
-      const txServices = new PgServiceRepository(txExecutor);
-
-      const customer = await txCustomers.findById(input.customerId);
+      const customer = await customers.findById(input.customerId);
       if (!customer) {
         throw new EntityNotFoundError('Customer', input.customerId);
       }
 
-      const barber = await txBarbers.findById(input.barberId);
+      const barber = await barbers.findById(input.barberId);
       if (!barber) {
         throw new EntityNotFoundError('Barber', input.barberId);
       }
@@ -54,7 +43,7 @@ export class CreateAppointment implements Command<CreateAppointmentInput, Appoin
         throw new InactiveBarberError(barber.id);
       }
 
-      const service = await txServices.findById(input.serviceId);
+      const service = await services.findById(input.serviceId);
       if (!service) {
         throw new EntityNotFoundError('Service', input.serviceId);
       }
@@ -66,13 +55,13 @@ export class CreateAppointment implements Command<CreateAppointmentInput, Appoin
       const startDateTime = input.dateTime;
       const endDateTime = new Date(startDateTime.getTime() + serviceDuration * 60 * 1000);
 
-      const conflictingAppointments = await txAppointments.findConflictingAppointments(input.barberId, startDateTime, endDateTime);
+      const conflictingAppointments = await appointments.findConflictingAppointments(input.barberId, startDateTime, endDateTime);
       if (conflictingAppointments.length > 0) {
         throw new ConflictError('Time slot is not available');
       }
 
       const appointment = createAppointment(input);
-      return txAppointments.create(appointment);
+      return appointments.create(appointment);
     });
   }
 }

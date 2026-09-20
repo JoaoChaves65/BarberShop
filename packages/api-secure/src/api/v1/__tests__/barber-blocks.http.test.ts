@@ -19,7 +19,6 @@ describe('Barber Blocks API - /api/v1/barber-blocks', () => {
     barber1Token = setup.barber1Token;
     barber2Token = setup.barber2Token;
     customer1Token = setup.customer1Token;
-    barber1Id = setup.barber1Id;
     barber1BarberId = setup.barber1BarberId;
     barber2BarberId = setup.barber2BarberId;
   });

@@ -84,6 +84,55 @@ export interface Appointment {
   updatedAt: string;
 }
 
+export interface BarberSchedule {
+  id: string;
+  barberId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  breakStart: string | null;
+  breakEnd: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BarberBlock {
+  id: string;
+  barberId: string;
+  startDateTime: string;
+  endDateTime: string;
+  reason: 'TIME_OFF' | 'LUNCH' | 'MAINTENANCE' | 'OTHER';
+  recurring: boolean;
+  recurrenceRule: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BarberAvailabilitySlot {
+  start: string;
+  end: string;
+  available: boolean;
+}
+
+export interface WeeklyScheduleItem {
+  barberId: string;
+  barberName: string;
+  schedules: BarberSchedule[];
+  blocks: BarberBlock[];
+}
+
+export interface WeeklyScheduleResponse {
+  data: WeeklyScheduleItem[];
+}
+
+export interface BarberBlockReason {
+  TIME_OFF: 'TIME_OFF';
+  LUNCH: 'LUNCH';
+  MAINTENANCE: 'MAINTENANCE';
+  OTHER: 'OTHER';
+}
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -206,6 +255,71 @@ export interface UpdateTransactionRequest {
   date?: string;
   appointmentId?: string;
   barberId?: string;
+}
+
+export interface CreateBarberScheduleRequest {
+  barberId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  breakStart?: string | null;
+  breakEnd?: string | null;
+}
+
+export interface UpdateBarberScheduleRequest {
+  dayOfWeek?: number;
+  startTime?: string;
+  endTime?: string;
+  breakStart?: string | null;
+  breakEnd?: string | null;
+  active?: boolean;
+}
+
+export interface ListBarberSchedulesParams {
+  page?: number;
+  limit?: number;
+  barberId?: string;
+}
+
+export interface CreateBarberBlockRequest {
+  barberId: string;
+  startDateTime: string;
+  endDateTime: string;
+  reason: 'TIME_OFF' | 'LUNCH' | 'MAINTENANCE' | 'OTHER';
+  recurring?: boolean;
+  recurrenceRule?: string | null;
+}
+
+export interface UpdateBarberBlockRequest {
+  startDateTime?: string;
+  endDateTime?: string;
+  reason?: 'TIME_OFF' | 'LUNCH' | 'MAINTENANCE' | 'OTHER';
+  recurring?: boolean;
+  recurrenceRule?: string | null;
+}
+
+export interface ListBarberBlocksParams {
+  page?: number;
+  limit?: number;
+  barberId?: string;
+}
+
+export interface ListAppointmentsParams {
+  page?: number;
+  limit?: number;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface AvailabilityQueryParams {
+  date: string;
+  serviceId: string;
+}
+
+export interface WeeklyScheduleQueryParams {
+  startDate: string;
+  barberIds?: string[];
 }
 
 export type AppointmentAction = 'confirm' | 'cancel' | 'complete';

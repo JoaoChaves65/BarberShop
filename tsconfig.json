@@ -20,8 +20,7 @@
     "baseUrl": ".",
     "paths": {
       "@barberlab/core": ["packages/core/src"],
-      "@barberlab/api-secure": ["packages/api-secure/src"],
-      "@barberlab/api-vulnerable": ["packages/api-vulnerable/src"]
+      "@barberlab/api-secure": ["packages/api-secure/src"]
     }
   },
   "exclude": ["node_modules", "dist", "packages/*/dist", "packages/*/node_modules"]

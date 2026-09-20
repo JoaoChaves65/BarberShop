@@ -8,3 +8,4 @@ export * from './service-repository';
 export * from './appointment-repository';
 export * from './transaction-repository';
 export * from './sql-executor';
+export * from './factory';

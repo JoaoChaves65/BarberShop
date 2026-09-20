@@ -1,12 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { createSqlExecutor } from '@barberlab/core/infrastructure';
-import {
-  PgAppointmentRepository,
-  PgCustomerRepository,
-  PgBarberRepository,
-  PgServiceRepository,
-} from '@barberlab/core/infrastructure';
+import { createSqlExecutor, PgRepositoryFactory } from '@barberlab/core/infrastructure';
 import {
   CreateAppointment,
   GetAppointment,
@@ -36,6 +30,8 @@ const listAppointmentsSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']).optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
 });
 
 const idParamSchema = z.object({
@@ -57,7 +53,8 @@ async function checkAppointmentAccess(
   notFound?: boolean;
 }> {
   const executor = createSqlExecutor();
-  const appointmentsRepo = new PgAppointmentRepository(executor);
+  const factory = new PgRepositoryFactory();
+  const appointmentsRepo = factory.createAppointmentRepository(executor);
   const appointment = await appointmentsRepo.findById(appointmentId);
   if (!appointment) {
     return { allowed: false, notFound: true };
@@ -75,8 +72,7 @@ async function checkAppointmentAccess(
   }
 
   if (userRole === 'BARBER') {
-    const { PgBarberRepository: BarbersRepo } = await import('@barberlab/core/infrastructure');
-    const barbersRepo = new BarbersRepo(executor);
+    const barbersRepo = factory.createBarberRepository(executor);
     const barber = await barbersRepo.findByUserId(userId);
     if (!barber) {
       return { allowed: false };
@@ -106,17 +102,8 @@ router.post(
     }
 
     const executor = createSqlExecutor();
-    const appointmentsRepo = new PgAppointmentRepository(executor);
-    const customersRepo = new PgCustomerRepository(executor);
-    const barbersRepo = new PgBarberRepository(executor);
-    const servicesRepo = new PgServiceRepository(executor);
-    const createAppointment = new CreateAppointment(
-      appointmentsRepo,
-      customersRepo,
-      barbersRepo,
-      servicesRepo,
-      executor
-    );
+    const factory = new PgRepositoryFactory();
+    const createAppointment = new CreateAppointment(factory, executor);
 
     const input = {
       ...parseResult.data,
@@ -159,7 +146,8 @@ router.get(
     }
 
     const executor = createSqlExecutor();
-    const appointmentsRepo = new PgAppointmentRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const appointmentsRepo = factory.createAppointmentRepository(executor);
     const listAppointments = new ListAppointments(appointmentsRepo);
 
     const userRole = req.user!.role as UserRole;
@@ -168,10 +156,7 @@ router.get(
     const result = await listAppointments.execute(parseResult.data);
 
     if (userRole === 'CUSTOMER') {
-      // Find the customer ID for this user
-      const { PgCustomerRepository: CustomersRepo } =
-        await import('@barberlab/core/infrastructure');
-      const customersRepo = new CustomersRepo(executor);
+      const customersRepo = factory.createCustomerRepository(executor);
       const customer = await customersRepo.findByUserId(userId);
       if (customer) {
         result.data = result.data.filter(a => a.customerId === customer.id);
@@ -179,9 +164,7 @@ router.get(
         result.data = [];
       }
     } else if (userRole === 'BARBER') {
-      // Find the barber ID for this user
-      const { PgBarberRepository: BarbersRepo } = await import('@barberlab/core/infrastructure');
-      const barbersRepo = new BarbersRepo(executor);
+      const barbersRepo = factory.createBarberRepository(executor);
       const barber = await barbersRepo.findByUserId(userId);
       if (barber) {
         result.data = result.data.filter(a => a.barberId === barber.id);
@@ -220,7 +203,8 @@ router.get(
     }
 
     const executor = createSqlExecutor();
-    const appointmentsRepo = new PgAppointmentRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const appointmentsRepo = factory.createAppointmentRepository(executor);
     const getAppointment = new GetAppointment(appointmentsRepo);
 
     const appointment = await getAppointment.execute({ id: parseResult.data.id });
@@ -295,7 +279,8 @@ router.patch(
     }
 
     const executor = createSqlExecutor();
-    const appointmentsRepo = new PgAppointmentRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const appointmentsRepo = factory.createAppointmentRepository(executor);
 
     let appointment;
     try {

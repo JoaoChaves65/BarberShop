@@ -10,6 +10,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { label: 'Dashboard', path: '/', roles: [UserRole.CUSTOMER, UserRole.BARBER, UserRole.ADMIN] },
+  { label: 'Agenda', path: '/agenda', roles: [UserRole.CUSTOMER, UserRole.BARBER, UserRole.ADMIN] },
   { label: 'Clientes', path: '/customers', roles: [UserRole.ADMIN] },
   {
     label: 'Barbeiros',

@@ -1,13 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { createSqlExecutor } from '@barberlab/core/infrastructure';
-import {
-  PgBarberScheduleRepository,
-  PgBarberBlockRepository,
-  PgBarberRepository,
-  PgServiceRepository,
-  PgAppointmentRepository,
-} from '@barberlab/core/infrastructure';
+import { createSqlExecutor, PgRepositoryFactory } from '@barberlab/core/infrastructure';
 import {
   CreateBarberSchedule,
   GetBarberSchedule,
@@ -22,7 +15,7 @@ import {
 import { authMiddleware } from '../../http/middleware/auth';
 import { requireRole } from '../../http/middleware/rbac';
 import type { AuthenticatedRequest } from '../../http/middleware/auth';
-import { AppError } from '@barberlab/core';
+import { AppError, InvalidDomainError } from '@barberlab/core';
 import type { UserRole } from '@barberlab/core';
 
 const router = Router();
@@ -79,7 +72,8 @@ async function checkBarberScheduleAccess(
   endpointType: 'schedule' | 'availability' | 'weekly' = 'schedule'
 ): Promise<{ allowed: boolean; barber?: { userId: string | null }; notFound?: boolean }> {
   const executor = createSqlExecutor();
-  const barbersRepo = new PgBarberRepository(executor);
+  const factory = new PgRepositoryFactory();
+  const barbersRepo = factory.createBarberRepository(executor);
   const barber = await barbersRepo.findById(barberId);
   if (!barber) {
     return { allowed: false, notFound: true };
@@ -93,14 +87,12 @@ async function checkBarberScheduleAccess(
   }
 
   if (userRole === 'BARBER') {
-    // For availability and weekly endpoints, BARBER can only access their own data
     if (endpointType === 'availability' || endpointType === 'weekly') {
       if (barber.userId !== userId) {
         return { allowed: false };
       }
       return { allowed: true, barber };
     }
-    // For schedule CRUD, BARBER can only access their own schedule
     if (barber.userId === userId) {
       return { allowed: true, barber };
     }
@@ -108,11 +100,9 @@ async function checkBarberScheduleAccess(
   }
 
   if (userRole === 'CUSTOMER') {
-    // CUSTOMER can view availability for booking
     if (endpointType === 'availability') {
       return { allowed: true, barber };
     }
-    // CUSTOMER should not access weekly schedule (internal)
     if (endpointType === 'weekly') {
       return { allowed: false };
     }
@@ -121,6 +111,120 @@ async function checkBarberScheduleAccess(
 
   return { allowed: false };
 }
+
+// Specific routes MUST come before parameterized routes
+router.get(
+  '/weekly',
+  requireRole('ADMIN', 'BARBER'),
+  async (req: AuthenticatedRequest, res) => {
+    const queryResult = weeklyScheduleQuerySchema.safeParse(req.query);
+    if (!queryResult.success) {
+      res.status(400).json({ error: 'Invalid query parameters', details: queryResult.error.flatten() });
+      return;
+    }
+
+    const userRole = req.user!.role as UserRole;
+    const userId = req.user!.sub;
+
+    let barberIds = queryResult.data.barberIds;
+    if (userRole === 'BARBER') {
+      const executor = createSqlExecutor();
+      const factory = new PgRepositoryFactory();
+      const barbersRepo = factory.createBarberRepository(executor);
+      const barber = await barbersRepo.findByUserId(userId);
+      if (!barber) {
+        res.status(403).json({ error: 'Barber profile not found' });
+        return;
+      }
+      barberIds = [barber.id];
+    }
+
+    const executor = createSqlExecutor();
+    const factory = new PgRepositoryFactory();
+    const schedulesRepo = factory.createBarberScheduleRepository(executor);
+    const blocksRepo = factory.createBarberBlockRepository(executor);
+    const barbersRepo = factory.createBarberRepository(executor);
+    const getWeekly = new GetWeeklySchedule(schedulesRepo, blocksRepo, barbersRepo);
+
+    const schedule = await getWeekly.execute({
+      startDate: new Date(queryResult.data.startDate),
+      barberIds,
+    });
+
+    res.json({
+      data: schedule.map((item: { barberId: string; barberName: string; schedules: BarberSchedule[]; blocks: BarberBlock[] }) => ({
+        barberId: item.barberId,
+        barberName: item.barberName,
+        schedules: item.schedules.map((s: BarberSchedule) => ({
+          id: s.id,
+          barberId: s.barberId,
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          breakStart: s.breakStart,
+          breakEnd: s.breakEnd,
+          active: s.active,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        })),
+        blocks: item.blocks.map((b: BarberBlock) => ({
+          id: b.id,
+          barberId: b.barberId,
+          startDateTime: b.startDateTime,
+          endDateTime: b.endDateTime,
+          reason: b.reason,
+          recurring: b.recurring,
+          recurrenceRule: b.recurrenceRule,
+          createdAt: b.createdAt,
+          updatedAt: b.updatedAt,
+        })),
+      })),
+    });
+  }
+);
+
+router.get(
+  '/barbers/:barberId/availability',
+  requireRole('ADMIN', 'BARBER', 'CUSTOMER'),
+  async (req: AuthenticatedRequest, res) => {
+    const paramsResult = barberIdParamSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: 'Invalid barber ID', details: paramsResult.error.flatten() });
+      return;
+    }
+
+    const queryResult = availabilityQuerySchema.safeParse(req.query);
+    if (!queryResult.success) {
+      res.status(400).json({ error: 'Invalid query parameters', details: queryResult.error.flatten() });
+      return;
+    }
+
+    const access = await checkBarberScheduleAccess(req, paramsResult.data.barberId, 'availability');
+    if (access.notFound) {
+      throw AppError.notFound('Barber', paramsResult.data.barberId);
+    }
+    if (!access.allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const executor = createSqlExecutor();
+    const factory = new PgRepositoryFactory();
+    const schedulesRepo = factory.createBarberScheduleRepository(executor);
+    const blocksRepo = factory.createBarberBlockRepository(executor);
+    const servicesRepo = factory.createServiceRepository(executor);
+    const appointmentsRepo = factory.createAppointmentRepository(executor);
+    const getAvailability = new GetBarberAvailability(schedulesRepo, blocksRepo, servicesRepo, appointmentsRepo);
+
+    const slots = await getAvailability.execute({
+      barberId: paramsResult.data.barberId,
+      date: new Date(queryResult.data.date),
+      serviceId: queryResult.data.serviceId,
+    });
+
+    res.json({ data: slots });
+  }
+);
 
 router.post(
   '/',
@@ -133,8 +237,9 @@ router.post(
     }
 
     const executor = createSqlExecutor();
-    const schedulesRepo = new PgBarberScheduleRepository(executor);
-    const barbersRepo = new PgBarberRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const schedulesRepo = factory.createBarberScheduleRepository(executor);
+    const barbersRepo = factory.createBarberRepository(executor);
     const createSchedule = new CreateBarberSchedule(schedulesRepo, barbersRepo);
 
     const input = {
@@ -159,6 +264,10 @@ router.post(
         updatedAt: schedule.updatedAt,
       });
     } catch (error: unknown) {
+      if (error instanceof InvalidDomainError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       if (error && typeof error === 'object' && 'code' in error) {
         const pgError = error as { code?: string };
         if (pgError.code === '23514') {
@@ -182,7 +291,8 @@ router.get(
     }
 
     const executor = createSqlExecutor();
-    const schedulesRepo = new PgBarberScheduleRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const schedulesRepo = factory.createBarberScheduleRepository(executor);
     const listSchedules = new ListBarberSchedules(schedulesRepo);
 
     const result = await listSchedules.execute(parseResult.data);
@@ -220,7 +330,8 @@ router.get(
     }
 
     const executor = createSqlExecutor();
-    const schedulesRepo = new PgBarberScheduleRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const schedulesRepo = factory.createBarberScheduleRepository(executor);
     const getSchedule = new GetBarberSchedule(schedulesRepo);
 
     const schedule = await getSchedule.execute({ id: parseResult.data.id });
@@ -260,7 +371,8 @@ router.patch(
     }
 
     const executor = createSqlExecutor();
-    const schedulesRepo = new PgBarberScheduleRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const schedulesRepo = factory.createBarberScheduleRepository(executor);
     const updateSchedule = new UpdateBarberSchedule(schedulesRepo);
 
     const existing = await schedulesRepo.findById(paramsResult.data.id);
@@ -276,7 +388,7 @@ router.patch(
         breakEnd: bodyResult.data.breakEnd ?? undefined,
       });
 
-res.json({
+      res.json({
         id: schedule.id,
         barberId: schedule.barberId,
         dayOfWeek: schedule.dayOfWeek,
@@ -289,6 +401,10 @@ res.json({
         updatedAt: schedule.updatedAt,
       });
     } catch (error: unknown) {
+      if (error instanceof InvalidDomainError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       if (error && typeof error === 'object' && 'code' in error) {
         const pgError = error as { code?: string };
         if (pgError.code === '23514') {
@@ -312,7 +428,8 @@ router.delete(
     }
 
     const executor = createSqlExecutor();
-    const schedulesRepo = new PgBarberScheduleRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const schedulesRepo = factory.createBarberScheduleRepository(executor);
     const deleteSchedule = new DeleteBarberSchedule(schedulesRepo);
 
     try {
@@ -324,117 +441,6 @@ router.delete(
       }
       throw error;
     }
-  }
-);
-
-router.get(
-  '/barbers/:barberId/availability',
-  requireRole('ADMIN', 'BARBER', 'CUSTOMER'),
-  async (req: AuthenticatedRequest, res) => {
-    const paramsResult = barberIdParamSchema.safeParse(req.params);
-    if (!paramsResult.success) {
-      res.status(400).json({ error: 'Invalid barber ID', details: paramsResult.error.flatten() });
-      return;
-    }
-
-    const queryResult = availabilityQuerySchema.safeParse(req.query);
-    if (!queryResult.success) {
-      res.status(400).json({ error: 'Invalid query parameters', details: queryResult.error.flatten() });
-      return;
-    }
-
-    const access = await checkBarberScheduleAccess(req, paramsResult.data.barberId, 'availability');
-    if (access.notFound) {
-      throw AppError.notFound('Barber', paramsResult.data.barberId);
-    }
-    if (!access.allowed) {
-      res.status(403).json({ error: 'Access denied' });
-      return;
-    }
-
-    const executor = createSqlExecutor();
-    const schedulesRepo = new PgBarberScheduleRepository(executor);
-    const blocksRepo = new PgBarberBlockRepository(executor);
-    const servicesRepo = new PgServiceRepository(executor);
-    const appointmentsRepo = new PgAppointmentRepository(executor);
-    const getAvailability = new GetBarberAvailability(schedulesRepo, blocksRepo, servicesRepo, appointmentsRepo);
-
-    const slots = await getAvailability.execute({
-      barberId: paramsResult.data.barberId,
-      date: new Date(queryResult.data.date),
-      serviceId: queryResult.data.serviceId,
-    });
-
-    res.json({ data: slots });
-  }
-);
-
-router.get(
-  '/weekly',
-  requireRole('ADMIN', 'BARBER'),
-  async (req: AuthenticatedRequest, res) => {
-    const queryResult = weeklyScheduleQuerySchema.safeParse(req.query);
-    if (!queryResult.success) {
-      res.status(400).json({ error: 'Invalid query parameters', details: queryResult.error.flatten() });
-      return;
-    }
-
-    const userRole = req.user!.role as UserRole;
-    const userId = req.user!.sub;
-
-    // For BARBER, restrict to their own schedule
-    let barberIds = queryResult.data.barberIds;
-    if (userRole === 'BARBER') {
-      const executor = createSqlExecutor();
-      const barbersRepo = new PgBarberRepository(executor);
-      const barber = await barbersRepo.findByUserId(userId);
-      if (!barber) {
-        res.status(403).json({ error: 'Barber profile not found' });
-        return;
-      }
-      barberIds = [barber.id];
-    }
-
-    const executor = createSqlExecutor();
-    const schedulesRepo = new PgBarberScheduleRepository(executor);
-    const blocksRepo = new PgBarberBlockRepository(executor);
-    const barbersRepo = new PgBarberRepository(executor);
-    const getWeekly = new GetWeeklySchedule(schedulesRepo, blocksRepo, barbersRepo);
-
-    const schedule = await getWeekly.execute({
-      startDate: new Date(queryResult.data.startDate),
-      barberIds,
-    });
-
-    res.json({
-      data: schedule.map((item: { barberId: string; barberName: string; schedules: BarberSchedule[]; blocks: BarberBlock[] }) => ({
-        barberId: item.barberId,
-        barberName: item.barberName,
-        schedules: item.schedules.map((s: BarberSchedule) => ({
-          id: s.id,
-          barberId: s.barberId,
-          dayOfWeek: s.dayOfWeek,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          breakStart: s.breakStart,
-          breakEnd: s.breakEnd,
-          active: s.active,
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
-        })),
-        blocks: item.blocks.map((b: BarberBlock) => ({
-          id: b.id,
-          barberId: b.barberId,
-          startDateTime: b.startDateTime,
-          endDateTime: b.endDateTime,
-          reason: b.reason,
-          recurring: b.recurring,
-          recurrenceRule: b.recurrenceRule,
-          createdAt: b.createdAt,
-          updatedAt: b.updatedAt,
-        })),
-      })),
-    });
   }
 );
 

@@ -23,6 +23,13 @@ export class InMemoryCustomerRepository
     return this.get(id);
   }
 
+  async findByUserId(userId: string): Promise<Customer | null> {
+    for (const customer of this.items.values()) {
+      if (customer.userId === userId) return customer;
+    }
+    return null;
+  }
+
   async findAll(params: PaginationParams): Promise<PaginatedResponse<Customer>> {
     return this.list(params);
   }

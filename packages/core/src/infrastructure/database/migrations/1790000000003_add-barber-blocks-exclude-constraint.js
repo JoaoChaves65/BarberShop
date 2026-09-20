@@ -7,10 +7,14 @@
 exports.up = pgm => {
   pgm.createExtension('btree_gist', { ifNotExists: true });
 
-  pgm.addConstraint('barber_blocks', 'no_overlapping_blocks', {
-    exclude: 'barber_id WITH =, tsrange(start_date_time, end_date_time) WITH &&',
-    using: 'gist',
-  });
+  pgm.sql(`
+    ALTER TABLE "barber_blocks"
+      ADD CONSTRAINT "no_overlapping_blocks"
+      EXCLUDE USING gist (
+        barber_id WITH =,
+        tstzrange(start_date_time, end_date_time) WITH &&
+      )
+  `);
 };
 
 exports.down = pgm => {

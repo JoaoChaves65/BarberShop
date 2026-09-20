@@ -17,7 +17,6 @@ describe('Barber Schedules API - /api/v1/barber-schedules', () => {
     adminToken = setup.adminToken;
     barber1Token = setup.barber1Token;
     customer1Token = setup.customer1Token;
-    barber1Id = setup.barber1Id;
     barber1BarberId = setup.barber1BarberId;
     service1Id = setup.service1Id;
   });
@@ -93,7 +92,7 @@ describe('Barber Schedules API - /api/v1/barber-schedules', () => {
       await request(app)
         .post('/api/v1/barber-schedules')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ barberId: barber1BarberId, dayOfWeek: 1, startTime: '18:00', endTime: '09:00' })
+        .send({ barberId: barber1BarberId, dayOfWeek: 2, startTime: '18:00', endTime: '09:00' })
         .expect(400);
     });
   });
@@ -103,15 +102,21 @@ describe('Barber Schedules API - /api/v1/barber-schedules', () => {
     let _scheduleId: string;
 
     beforeAll(async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const dayOfWeek = tomorrow.getDay();
+      console.log('[BEFOREALL DEBUG] Creating schedule for dayOfWeek:', dayOfWeek);
+
       const res = await request(app)
         .post('/api/v1/barber-schedules')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           barberId: barber1BarberId,
-          dayOfWeek: 2,
+          dayOfWeek,
           startTime: '09:00',
           endTime: '18:00',
         });
+      console.log('[BEFOREALL DEBUG] Created schedule:', res.body);
       _scheduleId = res.body.id;
     });
 
@@ -262,9 +267,22 @@ describe('Barber Schedules API - /api/v1/barber-schedules', () => {
     });
 
     it('Returns empty when no schedule for that day', async () => {
-      const sunday = new Date();
-      sunday.setDate(sunday.getDate() + ((7 - sunday.getDay()) % 7));
-      const dateStr = sunday.toISOString();
+      // POST tests create a schedule for Monday (dayOfWeek 1)
+      // GET beforeAll creates a schedule for tomorrow's day of week
+      // Use a day that is neither Monday (1) nor tomorrow's day of week
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowDayOfWeek = tomorrow.getDay();
+      const mondayDayOfWeek = 1;
+      
+      // Find a day that is not Monday and not tomorrow's day of week
+      const testDay = new Date();
+      testDay.setDate(testDay.getDate() + 1);
+      while (testDay.getDay() === tomorrowDayOfWeek || testDay.getDay() === mondayDayOfWeek) {
+        testDay.setDate(testDay.getDate() + 1);
+      }
+      const dateStr = testDay.toISOString();
+      console.log('[TEST DEBUG] tomorrowDayOfWeek:', tomorrowDayOfWeek, 'testDay:', testDay.getDay(), 'dateStr:', dateStr);
 
       const res = await request(app)
         .get(`/api/v1/barber-schedules/barbers/${barber1BarberId}/availability`)
@@ -272,6 +290,7 @@ describe('Barber Schedules API - /api/v1/barber-schedules', () => {
         .set('Authorization', `Bearer ${customer1Token}`)
         .expect(200);
 
+      console.log('[TEST DEBUG] slots:', res.body.data.length);
       expect(res.body.data).toHaveLength(0);
     });
   });

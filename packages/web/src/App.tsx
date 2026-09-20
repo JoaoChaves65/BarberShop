@@ -7,6 +7,7 @@ import { CustomersPage } from './pages/customers/CustomersPage';
 import { BarbersPage } from './pages/barbers/BarbersPage';
 import { ServicesPage } from './pages/services/ServicesPage';
 import { AppointmentsPage } from './pages/appointments/AppointmentsPage';
+import { AgendaPage } from './pages/agenda/AgendaPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { UsersPage } from './pages/users/UsersPage';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
@@ -26,6 +27,14 @@ export function App(): JSX.Element {
               element={
                 <ProtectedRoute>
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/agenda"
+              element={
+                <ProtectedRoute allowedRoles={[UserRole.CUSTOMER, UserRole.BARBER, UserRole.ADMIN]}>
+                  <AgendaPage />
                 </ProtectedRoute>
               }
             />

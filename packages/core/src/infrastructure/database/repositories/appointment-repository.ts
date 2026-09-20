@@ -1,7 +1,7 @@
 import type { Appointment, AppointmentStatus } from '../../../domain/appointment';
 import type { AppointmentRepository } from '../../../persistence/interfaces';
 import type { SqlExecutor } from '../../../persistence/interfaces';
-import type { PaginationParams, PaginatedResponse } from '../../../shared/pagination';
+import type { PaginatedResponse } from '../../../shared/pagination';
 import { BasePgRepository } from './base';
 
 export class PgAppointmentRepository
@@ -64,8 +64,60 @@ export class PgAppointmentRepository
     return appointment;
   }
 
-  async findAll(params: PaginationParams): Promise<PaginatedResponse<Appointment>> {
-    return super.findAll(params);
+  async findAll(params: { page: number; limit: number; status?: string; startDate?: string; endDate?: string }): Promise<PaginatedResponse<Appointment>> {
+    const { page, limit, status, startDate, endDate } = params;
+    const offset = (page - 1) * limit;
+
+    let whereClause = '';
+    const values: unknown[] = [];
+    let paramIndex = 1;
+
+    const conditions: string[] = [];
+
+    if (status) {
+      conditions.push(`status = $${paramIndex++}`);
+      values.push(status);
+    }
+
+    if (startDate) {
+      conditions.push(`date_time >= $${paramIndex++}`);
+      values.push(startDate);
+    }
+
+    if (endDate) {
+      conditions.push(`date_time <= $${paramIndex++}`);
+      values.push(endDate);
+    }
+
+    if (conditions.length > 0) {
+      whereClause = 'WHERE ' + conditions.join(' AND ');
+    }
+
+    const countQuery = `SELECT COUNT(*)::int as total FROM appointments ${whereClause}`;
+    const countResult = await this.executor.queryOne(countQuery, values);
+    const total = countResult?.total ?? 0;
+
+    values.push(limit, offset);
+
+    const dataQuery = `
+      SELECT * FROM appointments
+      ${whereClause}
+      ORDER BY date_time ASC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+
+    const rows = await this.executor.query(dataQuery, values);
+    const data = rows.map(row => this.mapRow(row));
+
+    return {
+      data,
+      meta: {
+        page: params.page,
+        limit: params.limit,
+        total,
+        totalPages: Math.ceil(total / params.limit),
+      },
+    };
   }
 
   async findConflictingAppointments(barberId: string, startDateTime: Date, endDateTime: Date): Promise<Appointment[]> {

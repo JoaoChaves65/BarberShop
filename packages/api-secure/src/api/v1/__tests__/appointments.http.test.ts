@@ -215,7 +215,7 @@ describe('Appointments API - /api/v1/appointments', () => {
 
   describe('POST /api/v1/appointments', () => {
     it('CUSTOMER: creates appointment for self', async () => {
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const dayAfterTomorrow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
       const res = await request(app)
         .post('/api/v1/appointments')
@@ -224,7 +224,7 @@ describe('Appointments API - /api/v1/appointments', () => {
           customerId: customer1CustId,
           barberId: barber1BarberId,
           serviceId: service1Id,
-          dateTime: tomorrow,
+          dateTime: dayAfterTomorrow,
         })
         .expect(201);
 
@@ -236,7 +236,7 @@ describe('Appointments API - /api/v1/appointments', () => {
     });
 
     it('CUSTOMER: tries to create for another customer -> 403', async () => {
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const dayAfterTomorrow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
       await request(app)
         .post('/api/v1/appointments')
@@ -245,13 +245,13 @@ describe('Appointments API - /api/v1/appointments', () => {
           customerId: customer2CustId,
           barberId: barber1BarberId,
           serviceId: service1Id,
-          dateTime: tomorrow,
+          dateTime: dayAfterTomorrow,
         })
         .expect(403);
     });
 
     it('ADMIN: creates appointment for any customer', async () => {
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const threeDaysFromNow = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
 
       const res = await request(app)
         .post('/api/v1/appointments')
@@ -260,7 +260,7 @@ describe('Appointments API - /api/v1/appointments', () => {
           customerId: customer1CustId,
           barberId: barber1BarberId,
           serviceId: service1Id,
-          dateTime: tomorrow,
+          dateTime: threeDaysFromNow,
         })
         .expect(201);
 
@@ -268,7 +268,7 @@ describe('Appointments API - /api/v1/appointments', () => {
     });
 
     it('Invalid barber -> 404', async () => {
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const dayAfterTomorrow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
       await request(app)
         .post('/api/v1/appointments')
@@ -277,13 +277,13 @@ describe('Appointments API - /api/v1/appointments', () => {
           customerId: customer1CustId,
           barberId: randomUUID(),
           serviceId: service1Id,
-          dateTime: tomorrow,
+          dateTime: dayAfterTomorrow,
         })
         .expect(404);
     });
 
     it('Invalid service -> 404', async () => {
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const dayAfterTomorrow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
       await request(app)
         .post('/api/v1/appointments')
@@ -292,7 +292,7 @@ describe('Appointments API - /api/v1/appointments', () => {
           customerId: customer1CustId,
           barberId: barber1BarberId,
           serviceId: randomUUID(),
-          dateTime: tomorrow,
+          dateTime: dayAfterTomorrow,
         })
         .expect(404);
     });

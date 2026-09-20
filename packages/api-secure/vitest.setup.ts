@@ -14,3 +14,5 @@ process.env.TEST_DB_USER = 'barberlab';
 process.env.TEST_DB_PASSWORD = 'changeme';
 process.env.CORS_ORIGIN = 'http://localhost:5173';
 process.env.NODE_ENV = 'test';
+process.env.RATE_LIMIT_WINDOW_MS = '900000';
+process.env.RATE_LIMIT_MAX_REQUESTS = '20';

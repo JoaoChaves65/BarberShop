@@ -4,4 +4,8 @@ export interface IdInput {
   id: string;
 }
 
-export type ListInput = PaginationParams;
+export interface ListInput extends PaginationParams {
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+}

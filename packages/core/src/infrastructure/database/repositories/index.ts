@@ -9,3 +9,4 @@ export * from './appointment-repository';
 export * from './transaction-repository';
 export * from './refresh-token-repository';
 export * from './vulnerable-repository';
+export * from './factory';

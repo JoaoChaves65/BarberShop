@@ -90,13 +90,23 @@ describe('Database Integration Tests', () => {
     });
 
     it('can roll back and re-apply migrations', async () => {
-      await runMigrations('down', 7);
+      await runMigrations('down', 11);
       const result = await pool.query(`
         SELECT table_name
         FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'users'
+        WHERE table_schema = 'public' AND table_name IN ('users', 'customers', 'barbers', 'services', 'appointments', 'transactions', 'refresh_tokens', 'barber_schedules', 'barber_blocks', 'migrations')
       `);
-      expect(result.rows).toHaveLength(0);
+      const remainingTables = result.rows.map(r => r.table_name);
+      expect(remainingTables).not.toContain('users');
+      expect(remainingTables).not.toContain('customers');
+      expect(remainingTables).not.toContain('barbers');
+      expect(remainingTables).not.toContain('services');
+      expect(remainingTables).not.toContain('appointments');
+      expect(remainingTables).not.toContain('transactions');
+      expect(remainingTables).not.toContain('refresh_tokens');
+      expect(remainingTables).not.toContain('barber_schedules');
+      expect(remainingTables).not.toContain('barber_blocks');
+      expect(remainingTables).toContain('migrations');
 
       await runMigrations('up');
       const reapply = await pool.query(`

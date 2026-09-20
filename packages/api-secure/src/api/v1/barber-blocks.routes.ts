@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { createSqlExecutor } from '@barberlab/core/infrastructure';
-import { PgBarberBlockRepository, PgBarberRepository } from '@barberlab/core/infrastructure';
+import { createSqlExecutor, PgRepositoryFactory } from '@barberlab/core/infrastructure';
 import {
   CreateBarberBlock,
   GetBarberBlock,
@@ -79,7 +78,8 @@ async function checkBarberBlockAccess(
   barberId: string
 ): Promise<{ allowed: boolean; barber?: { userId: string | null }; notFound?: boolean }> {
   const executor = createSqlExecutor();
-  const barbersRepo = new PgBarberRepository(executor);
+  const factory = new PgRepositoryFactory();
+  const barbersRepo = factory.createBarberRepository(executor);
   const barber = await barbersRepo.findById(barberId);
   if (!barber) {
     return { allowed: false, notFound: true };
@@ -113,11 +113,11 @@ router.post(
     const userId = req.user!.sub;
 
     const executor = createSqlExecutor();
-    const blocksRepo = new PgBarberBlockRepository(executor);
-    const barbersRepo = new PgBarberRepository(executor);
-    const createBlock = new CreateBarberBlock(blocksRepo, barbersRepo, executor);
+    const factory = new PgRepositoryFactory();
+    const createBlock = new CreateBarberBlock(factory, executor);
 
     if (userRole === 'BARBER') {
+      const barbersRepo = factory.createBarberRepository(executor);
       const barber = await barbersRepo.findByUserId(userId);
       if (!barber || barber.id !== parseResult.data.barberId) {
         res.status(403).json({ error: 'Cannot create blocks for another barber' });
@@ -150,6 +150,14 @@ router.post(
         res.status(409).json({ error: error.message });
         return;
       }
+      // Handle PostgreSQL exclusion constraint violation (EXCLUDE constraint)
+      if (error && typeof error === 'object' && 'code' in error) {
+        const pgError = error as { code?: string };
+        if (pgError.code === '23P01') {
+          res.status(409).json({ error: 'Block overlaps with existing block' });
+          return;
+        }
+      }
       throw error;
     }
   }
@@ -166,7 +174,8 @@ router.get(
     }
 
     const executor = createSqlExecutor();
-    const blocksRepo = new PgBarberBlockRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const blocksRepo = factory.createBarberBlockRepository(executor);
     const listBlocks = new ListBarberBlocks(blocksRepo);
 
     const userRole = req.user!.role as UserRole;
@@ -175,7 +184,7 @@ router.get(
     if (userRole === 'ADMIN') {
       result = await listBlocks.execute(parseResult.data);
     } else if (userRole === 'BARBER') {
-      const barbersRepo = new PgBarberRepository(executor);
+      const barbersRepo = factory.createBarberRepository(executor);
       const barber = await barbersRepo.findByUserId(req.user!.sub);
       if (!barber) {
         res.status(403).json({ error: 'Barber profile not found' });
@@ -219,7 +228,8 @@ router.get(
     }
 
     const executor = createSqlExecutor();
-    const blocksRepo = new PgBarberBlockRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const blocksRepo = factory.createBarberBlockRepository(executor);
     const getBlock = new GetBarberBlock(blocksRepo);
 
     const block = await getBlock.execute({ id: parseResult.data.id });
@@ -267,9 +277,9 @@ router.patch(
     }
 
     const executor = createSqlExecutor();
-    const blocksRepo = new PgBarberBlockRepository(executor);
-    const getBlock = new GetBarberBlock(blocksRepo);
-    const updateBlock = new UpdateBarberBlock(blocksRepo, executor);
+    const factory = new PgRepositoryFactory();
+    const getBlock = new GetBarberBlock(factory.createBarberBlockRepository(executor));
+    const updateBlock = new UpdateBarberBlock(factory, executor);
 
     const existing = await getBlock.execute({ id: paramsResult.data.id });
     if (!existing) {
@@ -280,7 +290,7 @@ router.patch(
     const userId = req.user!.sub;
 
     if (userRole === 'BARBER') {
-      const barbersRepo = new PgBarberRepository(executor);
+      const barbersRepo = factory.createBarberRepository(executor);
       const barber = await barbersRepo.findByUserId(userId);
       if (!barber || barber.id !== existing.barberId) {
         res.status(403).json({ error: 'Cannot update blocks for another barber' });
@@ -314,6 +324,14 @@ router.patch(
         res.status(409).json({ error: error.message });
         return;
       }
+      // Handle PostgreSQL exclusion constraint violation (EXCLUDE constraint)
+      if (error && typeof error === 'object' && 'code' in error) {
+        const pgError = error as { code?: string };
+        if (pgError.code === '23P01') {
+          res.status(409).json({ error: 'Block overlaps with existing block' });
+          return;
+        }
+      }
       throw error;
     }
   }
@@ -330,7 +348,8 @@ router.delete(
     }
 
     const executor = createSqlExecutor();
-    const blocksRepo = new PgBarberBlockRepository(executor);
+    const factory = new PgRepositoryFactory();
+    const blocksRepo = factory.createBarberBlockRepository(executor);
     const getBlock = new GetBarberBlock(blocksRepo);
     const deleteBlock = new DeleteBarberBlock(blocksRepo);
 
@@ -343,7 +362,7 @@ router.delete(
     const userId = req.user!.sub;
 
     if (userRole === 'BARBER') {
-      const barbersRepo = new PgBarberRepository(executor);
+      const barbersRepo = factory.createBarberRepository(executor);
       const barber = await barbersRepo.findByUserId(userId);
       if (!barber || barber.id !== existing.barberId) {
         res.status(403).json({ error: 'Cannot delete blocks for another barber' });

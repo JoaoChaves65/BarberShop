@@ -18,29 +18,23 @@ import {
   InactiveServiceError,
   InvalidStatusTransitionError,
 } from '../../domain/errors';
-import { InMemoryAppointmentRepository } from '../../persistence/in-memory/appointment-repository';
-import { InMemoryBarberRepository } from '../../persistence/in-memory/barber-repository';
-import { InMemoryCustomerRepository } from '../../persistence/in-memory/customer-repository';
-import { InMemoryServiceRepository } from '../../persistence/in-memory/service-repository';
-import type { InMemorySqlExecutor } from '../../persistence/in-memory/sql-executor';
+import { InMemoryRepositoryFactory } from '../../persistence/in-memory/factory';
+import { createInMemorySqlExecutor } from '../../persistence/in-memory/sql-executor';
 
 describe('Appointment use cases', () => {
-  let appointments: InMemoryAppointmentRepository;
-  let customers: InMemoryCustomerRepository;
-  let barbers: InMemoryBarberRepository;
-  let services: InMemoryServiceRepository;
-  let executor: InMemorySqlExecutor;
+  let factory: InMemoryRepositoryFactory;
+  let executor: ReturnType<typeof createInMemorySqlExecutor>;
   let customerId: string;
   let barberId: string;
   let serviceId: string;
 
   beforeEach(async () => {
-    appointments = new InMemoryAppointmentRepository();
-    customers = new InMemoryCustomerRepository();
-    barbers = new InMemoryBarberRepository();
-    services = new InMemoryServiceRepository();
-    const { InMemorySqlExecutor: InMemorySqlExecutorClass } = await import('../../persistence/in-memory/sql-executor');
-    executor = new InMemorySqlExecutorClass();
+    factory = new InMemoryRepositoryFactory();
+    executor = createInMemorySqlExecutor();
+
+    const customers = factory.createCustomerRepository(executor);
+    const barbers = factory.createBarberRepository(executor);
+    const services = factory.createServiceRepository(executor);
 
     const customer = await customers.create(createCustomer({ name: 'Carlos', phone: '(11) 99999-1111' }));
     customerId = customer.id;
@@ -52,7 +46,7 @@ describe('Appointment use cases', () => {
     ).id;
   });
 
-  const buildUseCase = () => new CreateAppointment(appointments, customers, barbers, services, executor);
+  const buildUseCase = () => new CreateAppointment(factory, executor);
 
   describe('CreateAppointment', () => {
     it('creates a PENDING appointment', async () => {
@@ -88,7 +82,9 @@ describe('Appointment use cases', () => {
     });
 
     it('rejects inactive barber', async () => {
-      await barbers.update({ ...(await barbers.findById(barberId))!, active: false });
+      const barbers = factory.createBarberRepository(executor);
+      const barber = await barbers.findById(barberId);
+      await barbers.update({ ...barber!, active: false });
       await expect(
         buildUseCase().execute({ customerId, barberId, serviceId, dateTime: new Date() })
       ).rejects.toThrow(InactiveBarberError);
@@ -106,7 +102,9 @@ describe('Appointment use cases', () => {
     });
 
     it('rejects inactive service', async () => {
-      await services.update({ ...(await services.findById(serviceId))!, active: false });
+      const services = factory.createServiceRepository(executor);
+      const service = await services.findById(serviceId);
+      await services.update({ ...service!, active: false });
       await expect(
         buildUseCase().execute({ customerId, barberId, serviceId, dateTime: new Date() })
       ).rejects.toThrow(InactiveServiceError);
@@ -124,41 +122,41 @@ describe('Appointment use cases', () => {
 
     it('confirms a PENDING appointment', async () => {
       const appointment = await createOne();
-      const confirmed = await new ConfirmAppointment(appointments).execute({ id: appointment.id });
+      const confirmed = await new ConfirmAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id });
       expect(confirmed.status).toBe(AppointmentStatus.CONFIRMED);
     });
 
     it('cancels a PENDING appointment', async () => {
       const appointment = await createOne();
-      const cancelled = await new CancelAppointment(appointments).execute({ id: appointment.id });
+      const cancelled = await new CancelAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id });
       expect(cancelled.status).toBe(AppointmentStatus.CANCELLED);
     });
 
     it('completes a CONFIRMED appointment', async () => {
       const appointment = await createOne();
-      await new ConfirmAppointment(appointments).execute({ id: appointment.id });
-      const completed = await new CompleteAppointment(appointments).execute({ id: appointment.id });
+      await new ConfirmAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id });
+      const completed = await new CompleteAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id });
       expect(completed.status).toBe(AppointmentStatus.COMPLETED);
     });
 
     it('rejects completing a PENDING appointment', async () => {
       const appointment = await createOne();
       await expect(
-        new CompleteAppointment(appointments).execute({ id: appointment.id })
+        new CompleteAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id })
       ).rejects.toThrow(InvalidStatusTransitionError);
     });
 
     it('rejects confirming an already-completed appointment', async () => {
       const appointment = await createOne();
-      await new ConfirmAppointment(appointments).execute({ id: appointment.id });
-      await new CompleteAppointment(appointments).execute({ id: appointment.id });
+      await new ConfirmAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id });
+      await new CompleteAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id });
       await expect(
-        new ConfirmAppointment(appointments).execute({ id: appointment.id })
+        new ConfirmAppointment(factory.createAppointmentRepository(executor)).execute({ id: appointment.id })
       ).rejects.toThrow(InvalidStatusTransitionError);
     });
 
     it('rejects transition of an unknown appointment', async () => {
-      await expect(new ConfirmAppointment(appointments).execute({ id: 'missing' })).rejects.toThrow(
+      await expect(new ConfirmAppointment(factory.createAppointmentRepository(executor)).execute({ id: 'missing' })).rejects.toThrow(
         EntityNotFoundError
       );
     });
@@ -172,12 +170,12 @@ describe('Appointment use cases', () => {
         serviceId,
         dateTime: new Date('2026-09-01T14:00:00Z'),
       });
-      const useCase = new GetAppointment(appointments);
+      const useCase = new GetAppointment(factory.createAppointmentRepository(executor));
       expect((await useCase.execute({ id: created.id }))?.id).toBe(created.id);
     });
 
     it('returns null when not found', async () => {
-      const useCase = new GetAppointment(appointments);
+      const useCase = new GetAppointment(factory.createAppointmentRepository(executor));
       expect(await useCase.execute({ id: 'missing' })).toBeNull();
     });
   });
@@ -188,7 +186,7 @@ describe('Appointment use cases', () => {
       await useCase.execute({ customerId, barberId, serviceId, dateTime: new Date() });
       await useCase.execute({ customerId, barberId, serviceId, dateTime: new Date('2026-09-02') });
 
-      const list = new ListAppointments(appointments);
+      const list = new ListAppointments(factory.createAppointmentRepository(executor));
       const result = await list.execute({ page: 1, limit: 10 });
       expect(result.data).toHaveLength(2);
       expect(result.meta.total).toBe(2);

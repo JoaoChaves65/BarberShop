@@ -50,6 +50,7 @@ export interface CustomerRepository {
   create(customer: Customer): Promise<Customer>;
   update(customer: Customer): Promise<Customer>;
   findById(id: string): Promise<Customer | null>;
+  findByUserId(userId: string): Promise<Customer | null>;
   findAll(params: PaginationParams): Promise<PaginatedResponse<Customer>>;
 }
 
@@ -114,3 +115,14 @@ export interface RefreshTokenRepository {
 }
 
 export type { RefreshTokenData };
+
+export interface RepositoryFactory {
+  createAppointmentRepository(executor: SqlExecutor): AppointmentRepository;
+  createBarberRepository(executor: SqlExecutor): BarberRepository;
+  createCustomerRepository(executor: SqlExecutor): CustomerRepository;
+  createServiceRepository(executor: SqlExecutor): ServiceRepository;
+  createBarberBlockRepository(executor: SqlExecutor): BarberBlockRepository;
+  createBarberScheduleRepository(executor: SqlExecutor): BarberScheduleRepository;
+  createUserRepository(executor: SqlExecutor): UserRepository;
+  createTransactionRepository(executor: SqlExecutor): TransactionRepository;
+}

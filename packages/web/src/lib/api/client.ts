@@ -21,6 +21,19 @@ import type {
   UpdateTransactionRequest,
   CreateTransactionRequest as CreateTransactionRequestType,
   AppointmentAction,
+  BarberSchedule,
+  BarberBlock,
+  BarberAvailabilitySlot,
+  WeeklyScheduleResponse,
+  CreateBarberScheduleRequest,
+  UpdateBarberScheduleRequest,
+  ListBarberSchedulesParams,
+  CreateBarberBlockRequest,
+  UpdateBarberBlockRequest,
+  ListBarberBlocksParams,
+  AvailabilityQueryParams,
+  WeeklyScheduleQueryParams,
+ListAppointmentsParams,
 } from '../../types/api';
 
 const API_BASE_URL = env.VITE_API_BASE_URL;
@@ -273,15 +286,13 @@ class ApiClient {
     });
   }
 
-  async getAppointments(params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-  }): Promise<PaginatedResponse<Appointment>> {
+  async getAppointments(params?: ListAppointmentsParams): Promise<PaginatedResponse<Appointment>> {
     const query = new URLSearchParams();
     if (params?.page) query.set('page', params.page.toString());
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.status) query.set('status', params.status);
+    if (params?.startDate) query.set('startDate', params.startDate);
+    if (params?.endDate) query.set('endDate', params.endDate);
     return this.request<PaginatedResponse<Appointment>>(`/api/v1/appointments?${query.toString()}`);
   }
 
@@ -330,6 +341,88 @@ class ApiClient {
     return this.request<Transaction>(`/api/v1/transactions/${id}`, {
       method: 'PATCH',
       body: data,
+    });
+  }
+
+  // Barber Schedules
+  async getBarberSchedules(params?: ListBarberSchedulesParams): Promise<PaginatedResponse<BarberSchedule>> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.barberId) query.set('barberId', params.barberId);
+    return this.request<PaginatedResponse<BarberSchedule>>(`/api/v1/barber-schedules?${query.toString()}`);
+  }
+
+  async getBarberSchedule(id: string): Promise<BarberSchedule> {
+    return this.request<BarberSchedule>(`/api/v1/barber-schedules/${id}`);
+  }
+
+  async createBarberSchedule(data: CreateBarberScheduleRequest): Promise<BarberSchedule> {
+    return this.request<BarberSchedule>('/api/v1/barber-schedules', {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async updateBarberSchedule(id: string, data: UpdateBarberScheduleRequest): Promise<BarberSchedule> {
+    return this.request<BarberSchedule>(`/api/v1/barber-schedules/${id}`, {
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
+  async deleteBarberSchedule(id: string): Promise<void> {
+    return this.request<void>(`/api/v1/barber-schedules/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getWeeklySchedule(params: WeeklyScheduleQueryParams): Promise<WeeklyScheduleResponse> {
+    const query = new URLSearchParams();
+    query.set('startDate', params.startDate);
+    if (params.barberIds?.length) {
+      query.set('barberIds', params.barberIds.join(','));
+    }
+    return this.request<WeeklyScheduleResponse>(`/api/v1/barber-schedules/weekly?${query.toString()}`);
+  }
+
+  async getBarberAvailability(barberId: string, params: AvailabilityQueryParams): Promise<BarberAvailabilitySlot[]> {
+    const query = new URLSearchParams();
+    query.set('date', params.date);
+    query.set('serviceId', params.serviceId);
+    return this.request<BarberAvailabilitySlot[]>(`/api/v1/barber-schedules/barbers/${barberId}/availability?${query.toString()}`);
+  }
+
+  // Barber Blocks
+  async getBarberBlocks(params?: ListBarberBlocksParams): Promise<PaginatedResponse<BarberBlock>> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.barberId) query.set('barberId', params.barberId);
+    return this.request<PaginatedResponse<BarberBlock>>(`/api/v1/barber-blocks?${query.toString()}`);
+  }
+
+  async getBarberBlock(id: string): Promise<BarberBlock> {
+    return this.request<BarberBlock>(`/api/v1/barber-blocks/${id}`);
+  }
+
+  async createBarberBlock(data: CreateBarberBlockRequest): Promise<BarberBlock> {
+    return this.request<BarberBlock>('/api/v1/barber-blocks', {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async updateBarberBlock(id: string, data: UpdateBarberBlockRequest): Promise<BarberBlock> {
+    return this.request<BarberBlock>(`/api/v1/barber-blocks/${id}`, {
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
+  async deleteBarberBlock(id: string): Promise<void> {
+    return this.request<void>(`/api/v1/barber-blocks/${id}`, {
+      method: 'DELETE',
     });
   }
 }
