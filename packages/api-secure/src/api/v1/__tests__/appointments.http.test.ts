@@ -20,6 +20,7 @@ describe('Appointments API - /api/v1/appointments', () => {
   let service3Id: string;
   let pendingApptId: string;
   let confirmedApptId: string;
+  let completedApptId: string;
   // Dedicated appointments for mutating tests (created in beforeAll)
   let barberConfirmApptId: string;
   let barberCompleteApptId: string;
@@ -39,6 +40,7 @@ describe('Appointments API - /api/v1/appointments', () => {
     service3Id = setup.service3Id;
     pendingApptId = setup.appt1Id;
     confirmedApptId = setup.appt2Id;
+    completedApptId = setup.appt3Id;
     customer1CustId = setup.customer1CustId;
     customer2CustId = setup.customer2CustId;
     barber1BarberId = setup.barber1BarberId;
@@ -114,6 +116,30 @@ describe('Appointments API - /api/v1/appointments', () => {
         new Date(),
         new Date(),
       ]
+    );
+
+    const scheduledTime = new Date();
+    scheduledTime.setDate(scheduledTime.getDate() + 1);
+    scheduledTime.setHours(10, 0, 0, 0);
+    await pool.query(
+      `INSERT INTO barber_schedules (id, barber_id, day_of_week, start_time, end_time, break_start, break_end, active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        randomUUID(),
+        barber1BarberId,
+        scheduledTime.getDay(),
+        '09:00',
+        '18:00',
+        null,
+        null,
+        true,
+        new Date(),
+        new Date(),
+      ]
+    );
+    await pool.query(
+      `UPDATE appointments SET date_time = $1 WHERE id IN ($2, $3, $4)`,
+      [scheduledTime, pendingApptId, confirmedApptId, completedApptId]
     );
   });
 
@@ -410,6 +436,98 @@ describe('Appointments API - /api/v1/appointments', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ action: 'cancel' })
         .expect(404);
+    });
+  });
+
+  describe('PATCH /api/v1/appointments/:id', () => {
+    it('ADMIN: updates dateTime, service, barber and notes', async () => {
+      const rescheduleTime = new Date();
+      rescheduleTime.setDate(rescheduleTime.getDate() + 1);
+      rescheduleTime.setHours(12, 0, 0, 0);
+
+      const res = await request(app)
+        .patch(`/api/v1/appointments/${pendingApptId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          dateTime: rescheduleTime.toISOString(),
+          barberId: barber1BarberId,
+          serviceId: service3Id,
+          notes: 'Reagendado pelo administrador',
+        })
+        .expect(200);
+
+      expect(res.body.serviceId).toBe(service3Id);
+      expect(res.body.barberId).toBe(barber1BarberId);
+      expect(res.body.notes).toBe('Reagendado pelo administrador');
+    });
+
+    it('rejects invalid payload -> 400', async () => {
+      await request(app)
+        .patch(`/api/v1/appointments/${pendingApptId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ notes: 123 })
+        .expect(400);
+    });
+
+    it('requires authentication -> 401', async () => {
+      await request(app)
+        .patch(`/api/v1/appointments/${pendingApptId}`)
+        .send({ notes: 'sem token' })
+        .expect(401);
+    });
+
+    it('CUSTOMER cannot update another customer appointment -> 403', async () => {
+      await request(app)
+        .patch(`/api/v1/appointments/${confirmedApptId}`)
+        .set('Authorization', `Bearer ${customer2Token}`)
+        .send({ notes: 'não permitido' })
+        .expect(403);
+    });
+
+    it('BARBER cannot update another barber appointment -> 403', async () => {
+      await request(app)
+        .patch(`/api/v1/appointments/${confirmedApptId}`)
+        .set('Authorization', `Bearer ${barber2Token}`)
+        .send({ notes: 'não permitido' })
+        .expect(403);
+    });
+
+    it('non-existent appointment -> 404', async () => {
+      await request(app)
+        .patch(`/api/v1/appointments/${randomUUID()}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ notes: 'não encontrado' })
+        .expect(404);
+    });
+
+    it('conflicting appointment -> 409', async () => {
+      const pool = getTestPool();
+      const scheduledTime = new Date();
+      scheduledTime.setDate(scheduledTime.getDate() + 1);
+      scheduledTime.setHours(10, 0, 0, 0);
+      await pool.query('UPDATE appointments SET date_time = $1 WHERE id = $2', [scheduledTime, confirmedApptId]);
+
+      await request(app)
+        .patch(`/api/v1/appointments/${pendingApptId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ dateTime: scheduledTime.toISOString() })
+        .expect(409);
+    });
+
+    it('completed appointment -> 409', async () => {
+      await request(app)
+        .patch(`/api/v1/appointments/${completedApptId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ notes: 'não permitido' })
+        .expect(409);
+    });
+
+    it('cancelled appointment -> 409', async () => {
+      await request(app)
+        .patch(`/api/v1/appointments/${customerCancelApptId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ notes: 'não permitido' })
+        .expect(409);
     });
   });
 });

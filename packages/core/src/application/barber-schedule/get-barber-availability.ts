@@ -55,6 +55,14 @@ export class GetBarberAvailability implements Query<GetBarberAvailabilityInput, 
       dayStart,
       dayEnd
     );
+    const appointmentDurations = new Map(
+      await Promise.all(
+        conflictingAppointments.map(async appointment => {
+          const appointmentService = await this.services.findById(appointment.serviceId);
+          return [appointment.id, appointmentService?.durationMinutes ?? 0] as const;
+        })
+      )
+    );
 
     const slots: TimeSlot[] = [];
     const slotInterval = 15;
@@ -76,7 +84,8 @@ export class GetBarberAvailability implements Query<GetBarberAvailabilityInput, 
 
       const hasAppointmentConflict = conflictingAppointments.some(appt => {
         const apptStart = appt.dateTime;
-        const apptEnd = new Date(apptStart.getTime() + serviceDuration * 60 * 1000);
+        const appointmentDuration = appointmentDurations.get(appt.id) ?? 0;
+        const apptEnd = new Date(apptStart.getTime() + appointmentDuration * 60 * 1000);
         return apptStart < slotEnd && apptEnd > slotStart;
       });
 

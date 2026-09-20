@@ -94,7 +94,12 @@ export interface AppointmentRepository {
   update(appointment: Appointment): Promise<Appointment>;
   findById(id: string): Promise<Appointment | null>;
   findAll(params: PaginationParams): Promise<PaginatedResponse<Appointment>>;
-  findConflictingAppointments(barberId: string, startDateTime: Date, endDateTime: Date): Promise<Appointment[]>;
+  findConflictingAppointments(
+    barberId: string,
+    startDateTime: Date,
+    endDateTime: Date,
+    excludeAppointmentId?: string
+  ): Promise<Appointment[]>;
 }
 
 export interface TransactionRepository {

@@ -8,6 +8,7 @@ import {
   ConfirmAppointment,
   CancelAppointment,
   CompleteAppointment,
+  UpdateAppointment,
 } from '@barberlab/core/application';
 import { authMiddleware } from '../../http/middleware/auth';
 import { requireRole } from '../../http/middleware/rbac';
@@ -25,6 +26,17 @@ const createAppointmentSchema = z.object({
   dateTime: z.string().datetime(),
   notes: z.string().max(1000).optional(),
 });
+
+const updateAppointmentSchema = z
+  .object({
+    dateTime: z.string().datetime().optional(),
+    barberId: z.string().uuid().optional(),
+    serviceId: z.string().uuid().optional(),
+    notes: z.string().max(1000).nullable().optional(),
+  })
+  .refine(data => Object.keys(data).length > 0, {
+    message: 'At least one appointment field must be provided',
+  });
 
 const listAppointmentsSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -223,6 +235,64 @@ router.get(
       createdAt: appointment.createdAt,
       updatedAt: appointment.updatedAt,
     });
+  }
+);
+
+router.patch(
+  '/:id',
+  requireRole('ADMIN', 'BARBER', 'CUSTOMER'),
+  async (req: AuthenticatedRequest, res) => {
+    const paramsResult = idParamSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      res
+        .status(400)
+        .json({ error: 'Invalid appointment ID', details: paramsResult.error.flatten() });
+      return;
+    }
+
+    const bodyResult = updateAppointmentSchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: 'Invalid request body', details: bodyResult.error.flatten() });
+      return;
+    }
+
+    const executor = createSqlExecutor();
+    const factory = new PgRepositoryFactory();
+    const updateAppointment = new UpdateAppointment(factory, executor);
+
+    try {
+      const appointment = await updateAppointment.execute({
+        id: paramsResult.data.id,
+        dateTime: bodyResult.data.dateTime
+          ? new Date(bodyResult.data.dateTime)
+          : undefined,
+        barberId: bodyResult.data.barberId,
+        serviceId: bodyResult.data.serviceId,
+        notes: bodyResult.data.notes,
+        actor: {
+          userId: req.user!.sub,
+          role: req.user!.role as UserRole,
+        },
+      });
+
+      res.json({
+        id: appointment.id,
+        customerId: appointment.customerId,
+        barberId: appointment.barberId,
+        serviceId: appointment.serviceId,
+        dateTime: appointment.dateTime,
+        status: appointment.status,
+        notes: appointment.notes,
+        createdAt: appointment.createdAt,
+        updatedAt: appointment.updatedAt,
+      });
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
   }
 );
 

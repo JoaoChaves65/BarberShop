@@ -33,10 +33,19 @@ export class InMemoryAppointmentRepository
     return this.list(params);
   }
 
-  async findConflictingAppointments(barberId: string, startDateTime: Date, endDateTime: Date): Promise<Appointment[]> {
+  async findConflictingAppointments(
+    barberId: string,
+    startDateTime: Date,
+    endDateTime: Date,
+    excludeAppointmentId?: string
+  ): Promise<Appointment[]> {
     const results: Appointment[] = [];
     for (const appointment of this.items.values()) {
-      if (appointment.barberId === barberId && CONFLICTING_STATUSES.includes(appointment.status)) {
+      if (
+        appointment.id !== excludeAppointmentId &&
+        appointment.barberId === barberId &&
+        CONFLICTING_STATUSES.includes(appointment.status)
+      ) {
         if (appointment.dateTime < endDateTime) {
           const serviceDuration = 30;
           const appointmentEnd = new Date(appointment.dateTime.getTime() + serviceDuration * 60 * 1000);

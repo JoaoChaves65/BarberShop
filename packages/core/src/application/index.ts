@@ -27,6 +27,7 @@ export * from './services/update-service';
 export * from './services/get-service';
 export * from './services/list-services';
 export * from './appointments/create-appointment';
+export * from './appointments/update-appointment';
 export * from './appointments/change-appointment-status';
 export * from './appointments/get-appointment';
 export * from './appointments/list-appointments';

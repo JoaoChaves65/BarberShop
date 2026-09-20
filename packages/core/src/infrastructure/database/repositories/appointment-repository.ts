@@ -120,7 +120,13 @@ export class PgAppointmentRepository
     };
   }
 
-  async findConflictingAppointments(barberId: string, startDateTime: Date, endDateTime: Date): Promise<Appointment[]> {
+  async findConflictingAppointments(
+    barberId: string,
+    startDateTime: Date,
+    endDateTime: Date,
+    excludeAppointmentId?: string
+  ): Promise<Appointment[]> {
+    const excludeClause = excludeAppointmentId ? 'AND a.id <> $4' : '';
     const rows = await this.executor.query(
       `SELECT a.*
        FROM appointments a
@@ -128,8 +134,11 @@ export class PgAppointmentRepository
        WHERE a.barber_id = $1
          AND a.status IN ('PENDING', 'CONFIRMED')
          AND a.date_time < $2
-         AND a.date_time + (s.duration_minutes || ' minutes')::interval > $3`,
-      [barberId, endDateTime, startDateTime]
+         AND a.date_time + (s.duration_minutes || ' minutes')::interval > $3
+         ${excludeClause}`,
+      excludeAppointmentId
+        ? [barberId, endDateTime, startDateTime, excludeAppointmentId]
+        : [barberId, endDateTime, startDateTime]
     );
     return rows.map(row => this.mapRow(row));
   }

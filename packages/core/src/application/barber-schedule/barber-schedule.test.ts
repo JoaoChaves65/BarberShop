@@ -8,6 +8,7 @@ import { GetBarberAvailability } from './get-barber-availability';
 import { GetWeeklySchedule } from './get-weekly-schedule';
 import { createBarber, type Barber } from '../../domain/barber';
 import { createService, type Service } from '../../domain/service';
+import { AppointmentStatus } from '../../domain/appointment';
 import { Money } from '../../domain/money';
 import { EntityNotFoundError } from '../../domain/errors';
 import { InMemoryBarberScheduleRepository } from '../../persistence/in-memory/barber-schedule-repository';
@@ -279,6 +280,49 @@ describe('BarberSchedule use cases', () => {
 
       const blockedSlots = slots.filter(s => !s.available);
       expect(blockedSlots.length).toBeGreaterThan(0);
+    });
+
+    it('uses the existing appointment service duration when marking slots', async () => {
+      const create = new CreateBarberSchedule(schedules, barbers);
+      await create.execute({
+        barberId: barber.id,
+        dayOfWeek: 1,
+        startTime: '09:00',
+        endTime: '13:00',
+      });
+
+      const longService = createService({
+        name: 'Combo longo',
+        price: Money.fromCents(8000),
+        durationMinutes: 60,
+      });
+      await services.create(longService);
+
+      const monday = new Date();
+      monday.setDate(monday.getDate() + ((1 + 7 - monday.getDay()) % 7));
+      monday.setHours(10, 0, 0, 0);
+      await appointments.create({
+        id: 'long-appointment',
+        customerId: 'customer-1',
+        barberId: barber.id,
+        serviceId: longService.id,
+        dateTime: monday,
+        status: AppointmentStatus.CONFIRMED,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const day = new Date(monday);
+      day.setHours(0, 0, 0, 0);
+      const useCase = new GetBarberAvailability(schedules, blocks, services, appointments);
+      const slots = await useCase.execute({
+        barberId: barber.id,
+        date: day,
+        serviceId: service.id,
+      });
+
+      expect(slots.find(slot => slot.start === '10:30')?.available).toBe(false);
     });
   });
 

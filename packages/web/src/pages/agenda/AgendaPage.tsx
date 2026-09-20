@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api/client';
@@ -6,19 +6,15 @@ import { UserRole } from '../../types/api';
 import type {
   Appointment,
   AppointmentStatus,
-  WeeklyScheduleItem,
-  BarberSchedule,
-  BarberBlock,
-  Customer,
   Barber,
+  BarberBlock,
+  BarberSchedule,
+  Customer,
   Service,
+  WeeklyScheduleItem,
 } from '../../types/api';
 
 const DAYS_OF_WEEK = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
-
-function formatDateForAPI(date: Date): string {
-  return date.toISOString();
-}
 
 function getStartOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -33,6 +29,16 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
+function formatWeekRange(start: Date): string {
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return `${start.getDate().toString().padStart(2, '0')}/${(start.getMonth() + 1).toString().padStart(2, '0')} - ${end.getDate().toString().padStart(2, '0')}/${(end.getMonth() + 1).toString().padStart(2, '0')}`;
+}
+
+function formatDateForAPI(date: Date): string {
+  return date.toISOString();
+}
+
 function formatTimeFromISO(isoString: string): string {
   return new Date(isoString).toLocaleTimeString('pt-BR', {
     hour: '2-digit',
@@ -40,20 +46,19 @@ function formatTimeFromISO(isoString: string): string {
   });
 }
 
-function formatWeekRange(start: Date): string {
-  const end = new Date(start);
-  end.setDate(end.getDate() + 6);
-  return `${start.getDate().toString().padStart(2, '0')}/${(start.getMonth() + 1).toString().padStart(2, '0')} - ${end.getDate().toString().padStart(2, '0')}/${(end.getMonth() + 1).toString().padStart(2, '0')}`;
+function toDateTimeLocalValue(date: Date): string {
+  const pad = (value: number): string => value.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function getScheduleForDay(weeklySchedule: WeeklyScheduleItem[], barberId: string, dayOfWeek: number): BarberSchedule | undefined {
   const item = weeklySchedule.find(w => w.barberId === barberId);
-  return item?.schedules.find(s => s.dayOfWeek === dayOfWeek && s.active);
+  return item?.schedules.find(schedule => schedule.dayOfWeek === dayOfWeek && schedule.active);
 }
 
 function getTimeSlots(schedule: BarberSchedule | undefined): string[] {
   if (!schedule) return [];
-  const slots: string[] = [];
+
   const startParts = schedule.startTime.split(':');
   const endParts = schedule.endTime.split(':');
   const startHour = Number(startParts[0]);
@@ -61,10 +66,11 @@ function getTimeSlots(schedule: BarberSchedule | undefined): string[] {
   const endHour = Number(endParts[0]);
   const endMin = Number(endParts[1]);
 
-  if (isNaN(startHour) || isNaN(startMin) || isNaN(endHour) || isNaN(endMin)) {
+  if (Number.isNaN(startHour) || Number.isNaN(startMin) || Number.isNaN(endHour) || Number.isNaN(endMin)) {
     return [];
   }
 
+  const slots: string[] = [];
   let currentHour = startHour;
   let currentMin = startMin;
 
@@ -73,18 +79,14 @@ function getTimeSlots(schedule: BarberSchedule | undefined): string[] {
     currentMin += 30;
     if (currentMin >= 60) {
       currentMin = 0;
-      currentHour++;
+      currentHour += 1;
     }
   }
 
   return slots;
 }
 
-function getBlocksForDay(
-  weeklySchedule: WeeklyScheduleItem[],
-  barberId: string,
-  date: Date
-): BarberBlock[] {
+function getBlocksForDay(weeklySchedule: WeeklyScheduleItem[], barberId: string, date: Date): BarberBlock[] {
   const item = weeklySchedule.find(w => w.barberId === barberId);
   if (!item) return [];
 
@@ -100,11 +102,7 @@ function getBlocksForDay(
   });
 }
 
-function getAppointmentsForDay(
-  appointments: Appointment[],
-  barberId: string,
-  date: Date
-): Appointment[] {
+function getAppointmentsForDay(appointments: Appointment[], barberId: string, date: Date): Appointment[] {
   const dayStart = new Date(date);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(date);
@@ -117,17 +115,14 @@ function getAppointmentsForDay(
   });
 }
 
-function isSlotBlocked(
-  weeklySchedule: WeeklyScheduleItem[],
-  barberId: string,
-  date: Date,
-  slotTime: string
-): boolean {
+function isSlotBlocked(weeklySchedule: WeeklyScheduleItem[], barberId: string, date: Date, slotTime: string): boolean {
   const blocks = getBlocksForDay(weeklySchedule, barberId, date);
   const slotParts = slotTime.split(':');
   const slotHour = Number(slotParts[0]);
   const slotMin = Number(slotParts[1]);
-  if (isNaN(slotHour) || isNaN(slotMin)) return false;
+
+  if (Number.isNaN(slotHour) || Number.isNaN(slotMin)) return false;
+
   const slotDate = new Date(date);
   slotDate.setHours(slotHour, slotMin, 0, 0);
   const slotEnd = new Date(slotDate.getTime() + 30 * 60 * 1000);
@@ -139,21 +134,19 @@ function isSlotBlocked(
   });
 }
 
-function getAppointmentAtSlot(
-  appointments: Appointment[],
-  barberId: string,
-  date: Date,
-  slotTime: string
-): Appointment | undefined {
-  const appts = getAppointmentsForDay(appointments, barberId, date);
+function getAppointmentAtSlot(appointments: Appointment[], barberId: string, date: Date, slotTime: string): Appointment | undefined {
   const slotParts = slotTime.split(':');
   const slotHour = Number(slotParts[0]);
   const slotMin = Number(slotParts[1]);
-  if (slotHour == null || slotMin == null) return undefined;
+
+  if (Number.isNaN(slotHour) || Number.isNaN(slotMin)) {
+    return undefined;
+  }
+
   const slotDate = new Date(date);
   slotDate.setHours(slotHour, slotMin, 0, 0);
 
-  return appts.find(appt => {
+  return getAppointmentsForDay(appointments, barberId, date).find(appt => {
     const apptDate = new Date(appt.dateTime);
     return apptDate.getTime() === slotDate.getTime();
   });
@@ -182,9 +175,7 @@ export function AgendaPage(): JSX.Element {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Modal state
   const [showModal, setShowModal] = useState(false);
-  const [modalLoading, setModalLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{
     barberId: string;
     barberName: string;
@@ -192,13 +183,11 @@ export function AgendaPage(): JSX.Element {
     slotTime: string;
   } | null>(null);
 
-  // Form data state
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [barbersList, setBarbersList] = useState<Barber[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [modalDataLoading, setModalDataLoading] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState({
     customerId: '',
     barberId: '',
@@ -210,8 +199,167 @@ export function AgendaPage(): JSX.Element {
   const [formSubmitting, setFormSubmitting] = useState(false);
 
   const today = new Date();
-  const isCurrentWeek =
-    today >= weekStart && today <= addDays(weekStart, 6);
+  const isCurrentWeek = today >= weekStart && today <= addDays(weekStart, 6);
+
+  const loadAgenda = async (): Promise<void> => {
+    try {
+      setIsLoading(true);
+      setError('');
+
+      const [weeklyResponse, appointmentsResponse] = await Promise.all([
+        api.getWeeklySchedule({ startDate: formatDateForAPI(weekStart) }),
+        api.getAppointments({
+          startDate: formatDateForAPI(weekStart),
+          endDate: formatDateForAPI(addDays(weekStart, 6)),
+          limit: 500,
+        }),
+      ]);
+
+      setWeeklySchedule(weeklyResponse.data ?? []);
+      setAppointments(appointmentsResponse.data ?? []);
+    } catch {
+      setError('Erro ao carregar a agenda.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadModalData = async (): Promise<void> => {
+    try {
+      setModalDataLoading(true);
+      const [customersResponse, barbersResponse, servicesResponse] = await Promise.all([
+        api.getCustomers({ limit: 100 }),
+        api.getBarbers({ limit: 100 }),
+        api.getServices({ limit: 100 }),
+      ]);
+
+      const allCustomers = customersResponse.data ?? [];
+      const visibleCustomers =
+        user?.role === UserRole.CUSTOMER
+          ? allCustomers.filter(customer => customer.userId === user.id)
+          : allCustomers;
+
+      setCustomers(visibleCustomers);
+      setBarbersList((barbersResponse.data ?? []).filter(barber => barber.active));
+      setServices((servicesResponse.data ?? []).filter(service => service.active));
+
+      if (user?.role === UserRole.CUSTOMER && visibleCustomers.length > 0) {
+        const defaultCustomerId = visibleCustomers[0]?.id ?? '';
+        setFormData(current => ({
+          ...current,
+          customerId: current.customerId || defaultCustomerId,
+        }));
+      }
+    } catch {
+      setFormError('Erro ao carregar clientes, barbeiros e serviços.');
+    } finally {
+      setModalDataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAgenda();
+  }, [weekStart]);
+
+  const goToPreviousWeek = (): void => {
+    setWeekStart(current => addDays(current, -7));
+  };
+
+  const goToNextWeek = (): void => {
+    setWeekStart(current => addDays(current, 7));
+  };
+
+  const goToToday = (): void => {
+    setWeekStart(getStartOfWeek(new Date()));
+  };
+
+  const handleSlotClick = (barberId: string, barberName: string, date: Date, slotTime: string): void => {
+    const [hoursValue, minutesValue] = slotTime.split(':');
+    const hours = Number(hoursValue);
+    const minutes = Number(minutesValue);
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return;
+    }
+
+    const slotDate = new Date(date);
+    slotDate.setHours(hours, minutes, 0, 0);
+
+    const defaultCustomerId =
+      user?.role === UserRole.CUSTOMER
+        ? customers.find(customer => customer.userId === user.id)?.id ?? ''
+        : '';
+
+    setSelectedSlot({ barberId, barberName, date, slotTime });
+    setFormData({
+      customerId: defaultCustomerId,
+      barberId,
+      serviceId: '',
+      dateTime: toDateTimeLocalValue(slotDate),
+      notes: '',
+    });
+    setFormError('');
+    setShowModal(true);
+    void loadModalData();
+  };
+
+  const closeModal = (): void => {
+    setShowModal(false);
+    setSelectedSlot(null);
+    setFormError('');
+  };
+
+  const handleFormChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>): void => {
+    const { name, value } = event.target;
+    setFormData(current => ({
+      ...current,
+      [name]: value,
+    }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!formData.customerId || !formData.barberId || !formData.serviceId || !formData.dateTime) {
+      setFormError('Preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    try {
+      setFormSubmitting(true);
+      await api.createAppointment({
+        customerId: formData.customerId,
+        barberId: formData.barberId,
+        serviceId: formData.serviceId,
+        dateTime: new Date(formData.dateTime).toISOString(),
+        notes: formData.notes || undefined,
+      });
+
+      setShowModal(false);
+      setSelectedSlot(null);
+      setFormData({
+        customerId: '',
+        barberId: '',
+        serviceId: '',
+        dateTime: '',
+        notes: '',
+      });
+      void loadAgenda();
+    } catch (error) {
+      const status = Number((error as { status?: number })?.status ?? 0);
+      const errorMessage = (error as { message?: string })?.message ?? '';
+
+      if (status === 409 || /conflito|indispon|overlap|not available/i.test(errorMessage)) {
+        setFormError('Horário indisponível para este barbeiro. Escolha outro horário ou serviço.');
+        return;
+      }
+
+      setFormError('Não foi possível criar o agendamento.');
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -230,31 +378,22 @@ export function AgendaPage(): JSX.Element {
     );
   }
 
-  const barbers = weeklySchedule;
-
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <h1 style={styles.title}>Agenda</h1>
         <div style={styles.headerActions}>
           <div style={styles.weekNavigation}>
-            <button
-              onClick={goToPreviousWeek}
-              style={styles.navButton}
-              aria-label="Semana anterior"
-            >
+            <button type="button" onClick={goToPreviousWeek} style={styles.navButton} aria-label="Semana anterior">
               ←
             </button>
             <span style={styles.weekLabel}>{formatWeekRange(weekStart)}</span>
-            <button
-              onClick={goToNextWeek}
-              style={styles.navButton}
-              aria-label="Próxima semana"
-            >
+            <button type="button" onClick={goToNextWeek} style={styles.navButton} aria-label="Próxima semana">
               →
             </button>
           </div>
           <button
+            type="button"
             onClick={goToToday}
             style={{ ...styles.todayButton, ...(isCurrentWeek ? styles.todayButtonActive : {}) }}
           >
@@ -263,7 +402,7 @@ export function AgendaPage(): JSX.Element {
         </div>
       </header>
 
-      {barbers.length === 0 && (
+      {weeklySchedule.length === 0 && (
         <div style={styles.emptyState}>
           <p>Nenhum barbeiro com agenda configurada para esta semana.</p>
         </div>
@@ -281,7 +420,7 @@ export function AgendaPage(): JSX.Element {
           </div>
         ))}
 
-        {barbers.map(barberItem => {
+        {weeklySchedule.map(barberItem => {
           const barberId = barberItem.barberId;
           const barberName = barberItem.barberName;
 
@@ -290,27 +429,29 @@ export function AgendaPage(): JSX.Element {
               <div style={styles.barberNameCell}>
                 <strong>{barberName}</strong>
               </div>
+
               {DAYS_OF_WEEK.map((_, dayIndex) => {
                 const schedule = getScheduleForDay(weeklySchedule, barberId, dayIndex);
                 const slots = getTimeSlots(schedule);
+                const dayDate = addDays(weekStart, dayIndex);
 
                 return (
-                  <div key={dayIndex} style={styles.dayCell}>
+                  <div key={`${barberId}-${dayIndex}`} style={styles.dayCell}>
                     {slots.map(slotTime => {
-                      const isBlocked = isSlotBlocked(weeklySchedule, barberId, addDays(weekStart, dayIndex), slotTime);
-                      const appointment = getAppointmentAtSlot(appointments, barberId, addDays(weekStart, dayIndex), slotTime);
+                      const isBlocked = isSlotBlocked(weeklySchedule, barberId, dayDate, slotTime);
+                      const appointment = getAppointmentAtSlot(appointments, barberId, dayDate, slotTime);
                       const isToday = dayIndex === today.getDay() && isCurrentWeek;
 
                       return (
                         <div
-                          key={slotTime}
+                          key={`${barberId}-${dayIndex}-${slotTime}`}
                           style={{
                             ...styles.timeSlot,
                             ...(isBlocked ? styles.timeSlotBlocked : {}),
                             ...(appointment ? styles.timeSlotAppointment : {}),
                             ...(isToday && !isBlocked && !appointment ? styles.timeSlotToday : {}),
                           }}
-                          onClick={() => !isBlocked && !appointment && handleSlotClick(barberId, barberName, addDays(weekStart, dayIndex), slotTime)}
+                          onClick={() => !isBlocked && !appointment && handleSlotClick(barberId, barberName, dayDate, slotTime)}
                         >
                           {appointment ? (
                             <div
@@ -320,12 +461,8 @@ export function AgendaPage(): JSX.Element {
                               }}
                               title={`${formatTimeFromISO(appointment.dateTime)} - ${appointment.status}`}
                             >
-                              <div style={styles.appointmentTime}>
-                                {formatTimeFromISO(appointment.dateTime)}
-                              </div>
-                              <div style={styles.appointmentStatus}>
-                                {appointment.status}
-                              </div>
+                              <div style={styles.appointmentTime}>{formatTimeFromISO(appointment.dateTime)}</div>
+                              <div style={styles.appointmentStatus}>{appointment.status}</div>
                             </div>
                           ) : isBlocked ? (
                             <div style={styles.blockedSlot} title="Horário bloqueado">
@@ -341,19 +478,20 @@ export function AgendaPage(): JSX.Element {
                 );
               })}
             </div>
-          )}
-        )}
+          );
+        })}
       </div>
 
       {showModal && (
         <div style={styles.modalOverlay} onClick={closeModal}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+          <div style={styles.modal} onClick={event => event.stopPropagation()}>
             <header style={styles.modalHeader}>
               <h2 style={styles.modalTitle}>Novo Agendamento</h2>
-              <button onClick={closeModal} style={styles.closeButton} disabled={modalDataLoading || formSubmitting}>
+              <button type="button" onClick={closeModal} style={styles.closeButton} disabled={modalDataLoading || formSubmitting}>
                 ×
               </button>
             </header>
+
             <form onSubmit={handleSubmit} style={styles.form}>
               {modalDataLoading ? (
                 <div style={styles.loadingContainer}>
@@ -367,6 +505,7 @@ export function AgendaPage(): JSX.Element {
                       {formError}
                     </div>
                   )}
+
                   <div style={styles.formField}>
                     <label htmlFor="customerId" style={styles.label}>
                       Cliente *
@@ -378,7 +517,7 @@ export function AgendaPage(): JSX.Element {
                       onChange={handleFormChange}
                       required
                       style={styles.select}
-                      disabled={modalDataLoading || formSubmitting}
+                      disabled={formSubmitting}
                     >
                       <option value="">Selecione um cliente</option>
                       {customers.map(customer => (
@@ -388,6 +527,7 @@ export function AgendaPage(): JSX.Element {
                       ))}
                     </select>
                   </div>
+
                   <div style={styles.formField}>
                     <label htmlFor="barberId" style={styles.label}>
                       Barbeiro *
@@ -395,11 +535,11 @@ export function AgendaPage(): JSX.Element {
                     <select
                       id="barberId"
                       name="barberId"
-                      value={formData.barberId || (selectedSlot?.barberId || '')}
+                      value={formData.barberId || selectedSlot?.barberId || ''}
                       onChange={handleFormChange}
                       required
                       style={styles.select}
-                      disabled={modalDataLoading || formSubmitting}
+                      disabled={formSubmitting}
                     >
                       <option value="">Selecione um barbeiro</option>
                       {barbersList.map(barber => (
@@ -409,6 +549,7 @@ export function AgendaPage(): JSX.Element {
                       ))}
                     </select>
                   </div>
+
                   <div style={styles.formField}>
                     <label htmlFor="serviceId" style={styles.label}>
                       Serviço *
@@ -420,7 +561,7 @@ export function AgendaPage(): JSX.Element {
                       onChange={handleFormChange}
                       required
                       style={styles.select}
-                      disabled={modalDataLoading || formSubmitting}
+                      disabled={formSubmitting}
                     >
                       <option value="">Selecione um serviço</option>
                       {services.map(service => (
@@ -430,6 +571,7 @@ export function AgendaPage(): JSX.Element {
                       ))}
                     </select>
                   </div>
+
                   <div style={styles.formField}>
                     <label htmlFor="dateTime" style={styles.label}>
                       Data e Hora *
@@ -442,9 +584,10 @@ export function AgendaPage(): JSX.Element {
                       onChange={handleFormChange}
                       required
                       style={styles.input}
-                      disabled={modalDataLoading || formSubmitting}
+                      disabled={formSubmitting}
                     />
                   </div>
+
                   <div style={styles.formField}>
                     <label htmlFor="notes" style={styles.label}>
                       Observações
@@ -455,14 +598,15 @@ export function AgendaPage(): JSX.Element {
                       value={formData.notes}
                       onChange={handleFormChange}
                       style={{ ...styles.input, minHeight: '80px', resize: 'vertical' }}
-                      disabled={modalDataLoading || formSubmitting}
+                      disabled={formSubmitting}
                     />
                   </div>
+
                   <div style={styles.formActions}>
-                    <button type="button" onClick={closeModal} style={styles.secondaryButton} disabled={modalDataLoading || formSubmitting}>
+                    <button type="button" onClick={closeModal} style={styles.secondaryButton} disabled={formSubmitting}>
                       Cancelar
                     </button>
-                    <button type="submit" style={styles.primaryButton} disabled={modalDataLoading || formSubmitting}>
+                    <button type="submit" style={styles.primaryButton} disabled={formSubmitting}>
                       {formSubmitting ? 'Criando...' : 'Criar'}
                     </button>
                   </div>
@@ -474,12 +618,6 @@ export function AgendaPage(): JSX.Element {
       )}
     </div>
   );
-}
-
-function formatWeekRange(start: Date): string {
-  const end = new Date(start);
-  end.setDate(end.getDate() + 6);
-  return `${start.getDate().toString().padStart(2, '0')}/${(start.getMonth() + 1).toString().padStart(2, '0')} - ${end.getDate().toString().padStart(2, '0')}/${(end.getMonth() + 1).toString().padStart(2, '0')}`;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -685,8 +823,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#991b1b',
     marginBottom: 'var(--spacing-lg)',
   },
-
-  // Modal styles
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -793,29 +929,5 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
     cursor: 'pointer',
-  },
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 'var(--spacing-xl)',
-    gap: 'var(--spacing-md)',
-  },
-  spinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid var(--color-border)',
-    borderTopColor: 'var(--color-primary)',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-  },
-error: {
-    backgroundColor: '#fef2f2',
-    border: '1px solid #fecaca',
-    borderRadius: 'var(--radius-md)',
-    padding: 'var(--spacing-md)',
-    color: '#991b1b',
-    marginBottom: 'var(--spacing-lg)',
   },
 };
